@@ -1,10 +1,12 @@
 // ホーム画面（上で「単語」「文法」を切り替える。記録は1つのまま）
+import { useState } from "react";
 import { saveSettings } from "../data/db";
 import { dayStats, logsOfDeck, unit } from "../data/stats";
 import { daysUntil, formatDayJa, localDay, streakDays } from "../lib/date";
 import { dueItems, poolOf } from "../srs/session";
 import { deckSettings, type Deck, type KinfreFormat, type Round } from "../types";
-import { ProgressBar } from "./components";
+import { BackupPlaceHint, ProgressBar } from "./components";
+import { backupDoneMessage } from "./Settings";
 import type { Store } from "./store";
 
 const BACKUP_REMIND_DAYS = 3;
@@ -28,7 +30,7 @@ export function Home({
   onDaily: () => void;
   onContinueRound: (r: Round) => void;
   onNewRound: () => void;
-  onBackup: () => void;
+  onBackup: () => Promise<string | null>; // 書き出したファイル名（キャンセルなら null）
   onGoSettings: () => void;
   onOpenTips: () => void;
 }) {
@@ -52,6 +54,11 @@ export function Home({
 
   const daysSinceBackup = store.lastBackupAt ? Math.floor((now - store.lastBackupAt) / 86400000) : null;
   const needBackup = store.logs.length > 0 && (daysSinceBackup === null || daysSinceBackup >= BACKUP_REMIND_DAYS);
+  const [backupDone, setBackupDone] = useState<string | null>(null);
+  const backup = async () => {
+    const name = await onBackup();
+    if (name) setBackupDone(backupDoneMessage(name, settings.backupPlace));
+  };
 
   const update = async (patch: Partial<typeof settings>) => {
     await saveSettings({ ...settings, ...patch });
@@ -88,9 +95,16 @@ export function Home({
             {daysSinceBackup === null ? "まだバックアップがありません。" : `最後のバックアップから${daysSinceBackup}日たちました。`}
             記録を守るために書き出しておきましょう。
           </p>
-          <button className="btn small" onClick={onBackup}>
+          <BackupPlaceHint place={settings.backupPlace} />
+          <button className="btn small" onClick={backup}>
             いま書き出す
           </button>
+        </section>
+      )}
+
+      {backupDone && (
+        <section className="card notice" role="status">
+          <p>{backupDone}</p>
         </section>
       )}
 

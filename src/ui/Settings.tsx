@@ -18,19 +18,25 @@ import { mergeChapters } from "../data/parseDeru";
 import { parseMaterialFile } from "../data/parseFile";
 import { ensurePersisted, isStandalone, type PersistState } from "../data/persist";
 import { formatDateTime, localDay } from "../lib/date";
-import type { ChapterInfo, Item, Settings as SettingsT, TipsDoc } from "../types";
-import { TopBar } from "./components";
+import { DEFAULT_BACKUP_PLACE, type ChapterInfo, type Item, type Settings as SettingsT, type TipsDoc } from "../types";
+import { BackupPlaceHint, TopBar } from "./components";
 import type { Store } from "./store";
 
-export async function exportBackup(store: Store): Promise<boolean> {
+/** バックアップを書き出す。戻り値は書き出したファイル名（キャンセルなら null） */
+export async function exportBackup(store: Store): Promise<string | null> {
   const now = Date.now();
+  const name = backupFileName(now);
   const text = JSON.stringify(await buildBackup(now));
-  const ok = await saveTextFile(backupFileName(now), text, "application/json");
-  if (ok) {
-    await markBackedUp(now);
-    await store.reload();
-  }
-  return ok;
+  const ok = await saveTextFile(name, text, "application/json");
+  if (!ok) return null;
+  await markBackedUp(now);
+  await store.reload();
+  return name;
+}
+
+/** 書き出したあとの案内（どこに保存したはずか） */
+export function backupDoneMessage(name: string, place: string): string {
+  return `バックアップ（${name}）を書き出しました。保存先「${place}」に入っているか、「ファイル」アプリで確かめてください。`;
 }
 
 /** 秒数・問題数などの選択肢 */
@@ -68,10 +74,13 @@ export function Settings({ store }: { store: Store }) {
   const [skipped, setSkipped] = useState<string[]>([]);
   const [persist, setPersist] = useState<PersistState | null>(null);
   const s = store.settings;
+  const [placeDraft, setPlaceDraft] = useState(s.backupPlace);
 
   useEffect(() => {
     void ensurePersisted().then(setPersist);
   }, []);
+
+  useEffect(() => setPlaceDraft(s.backupPlace), [s.backupPlace]);
 
   const update = async (patch: Partial<SettingsT>) => {
     await saveSettings({ ...s, ...patch });
@@ -136,6 +145,20 @@ export function Settings({ store }: { store: Store }) {
     }
   };
 
+  const backup = async () => {
+    const name = await exportBackup(store);
+    if (name) {
+      setMsg(backupDoneMessage(name, s.backupPlace));
+      setSkipped([]);
+    }
+  };
+
+  const savePlace = () => {
+    const place = placeDraft.trim() || DEFAULT_BACKUP_PLACE;
+    setPlaceDraft(place);
+    if (place !== s.backupPlace) void update({ backupPlace: place });
+  };
+
   const stamp = () => localDay(Date.now()).replace(/-/g, "");
   const exportKinfreMiss = async () => {
     const md = missListMarkdown(store.items, store.cards, store.notes, store.logs, Date.now());
@@ -194,16 +217,24 @@ export function Settings({ store }: { store: Store }) {
         </p>
         <p>ホーム画面から起動：{isStandalone() ? <b className="ok">はい</b> : <b className="ng">いいえ（Safariのタブで開いています）</b>}</p>
         <p className="sub">
-          回答は1問ごとに端末内へ保存されます（単語・文法とも同じ記録）。端末の故障や Safari のデータ削除に備えて、ときどきバックアップを iCloud Drive に保存してください（最後のバックアップ：
+          回答は1問ごとに端末内へ保存されます（単語・文法とも同じ記録）。端末の故障や Safari のデータ削除に備えて、ときどきバックアップを下の保存先に書き出してください（最後のバックアップ：
           {store.lastBackupAt ? formatDateTime(store.lastBackupAt) : "なし"}）。
         </p>
+        <BackupPlaceHint place={s.backupPlace} />
         <div className="btn-row">
-          <button className="btn" onClick={() => exportBackup(store)}>
+          <button className="btn" onClick={backup}>
             バックアップを書き出す
           </button>
           <label className="btn ghost file">
             バックアップから戻す
             <input type="file" onChange={(e) => (restore(e.target.files), (e.target.value = ""))} />
+          </label>
+        </div>
+        <p className="sub">戻すときは、保存先のいちばん新しいファイル（名前の日付・時刻が最後のもの）を選びます。</p>
+        <div className="form">
+          <label>
+            バックアップの保存先（書き出すたびに案内する場所。変えたときだけ書き直す）
+            <input type="text" value={placeDraft} onChange={(e) => setPlaceDraft(e.target.value)} onBlur={savePlace} />
           </label>
         </div>
       </section>
@@ -333,7 +364,7 @@ export function Settings({ store }: { store: Store }) {
         />
         <p className="sub">🔊 のボタンは端末の読み上げ機能（合成音声）で読みます。公式の音声ではありません。iPhone で鳴らないときは、マナーモード（消音）を切ってください。</p>
       </section>
-      <p className="footer-note">TOEIC単語・文法トレーナー v0.4（個人用の非公式ツール）・教材データはこの端末の中だけにあります</p>
+      <p className="footer-note">TOEIC単語・文法トレーナー v0.5（個人用の非公式ツール）・教材データはこの端末の中だけにあります</p>
     </div>
   );
 }

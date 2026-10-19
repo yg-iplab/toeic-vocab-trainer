@@ -769,6 +769,7 @@ h2 {
 .form select,
 .form textarea,
 .form input[type="date"],
+.form input[type="text"],
 .range-inputs input {
   width: 100%;
   min-height: 44px;
@@ -1172,6 +1173,38 @@ code {
   margin-left: 4px;
   color: var(--muted);
   font-weight: 400;
+}
+
+/* 例文の読み取り漏れの印・語彙の一覧 */
+.example-warn {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.vocab-list {
+  margin: 4px 0 0;
+  padding-left: 1.2em;
+}
+
+.vocab-list li {
+  margin: 2px 0;
+}
+
+.vocab-none {
+  margin: 4px 0;
+}
+
+/* バックアップの保存先の案内 */
+.backup-place {
+  margin: 8px 0 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--bg);
+}
+
+.backup-place p {
+  margin: 0 0 4px;
+  overflow-wrap: anywhere;
 }
 
 /* 発音ボタン（端末の読み上げ機能） */

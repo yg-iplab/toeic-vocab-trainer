@@ -114,11 +114,27 @@ test("読み込み → 周回 → ミス → 再起動しても記録が残る �
   // バックアップを書き出す
   await page.goto("./");
   await page.getByRole("button", { name: "設定", exact: true }).click();
+  // 書き出す前に、毎回の保存先が見えている
+  await expect(page.locator(".backup-place")).toContainText("保存先：iCloud Drive › TOEICトレーナー › バックアップ");
   const downloadPromise = page.waitForEvent("download");
   await page.getByRole("button", { name: "バックアップを書き出す" }).click();
   const download = await downloadPromise;
   const path = "test-results/backup.json";
   await download.saveAs(path);
+  expect(download.suggestedFilename()).toMatch(/^toeic-trainer-backup-\d{8}-\d{4}\.json$/);
+  await expect(page.getByRole("status")).toContainText("保存先「iCloud Drive › TOEICトレーナー › バックアップ」に入っているか");
+  await page.screenshot({ path: "test-results/08_backup_place.png", fullPage: true });
+
+  // 保存先を変えると、開き直しても残り、案内も変わる
+  const placeInput = page.locator("label", { hasText: "バックアップの保存先" }).locator("input");
+  await placeInput.fill("架空ドライブ › 保管");
+  await placeInput.blur();
+  await page.reload();
+  await page.getByRole("button", { name: "設定", exact: true }).click();
+  await expect(page.locator(".backup-place")).toContainText("保存先：架空ドライブ › 保管");
+  await placeInput.fill("");
+  await placeInput.blur();
+  await expect(page.locator(".backup-place")).toContainText("保存先：iCloud Drive › TOEICトレーナー › バックアップ"); // 空にすると既定に戻る
   const backup = JSON.parse(readFileSync(path, "utf-8"));
   expect(backup.app).toBe("kinfre-trainer");
   expect(backup.logs.length).toBeGreaterThanOrEqual(12); // 10問＋もう一度2問

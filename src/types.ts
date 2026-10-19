@@ -168,7 +168,11 @@ export type Settings = {
   retention: number; // FSRS の目標保持率
   autoNext: boolean;
   speechRate: number; // 発音ボタンの読み上げの速さ（1 がふつう）
+  // バックアップの保存先。アプリからは保存先を選べない（共有の画面で選ぶ）ので、書き出すたびにこの場所を案内する
+  backupPlace: string;
 };
+
+export const DEFAULT_BACKUP_PLACE = "iCloud Drive › TOEICトレーナー › バックアップ";
 
 export const DEFAULT_SETTINGS: Settings = {
   deck: "kinfre",
@@ -186,6 +190,7 @@ export const DEFAULT_SETTINGS: Settings = {
   retention: 0.9,
   autoNext: true,
   speechRate: 0.9,
+  backupPlace: DEFAULT_BACKUP_PLACE,
 };
 
 /** 教材ごとに分かれている設定を取り出す */

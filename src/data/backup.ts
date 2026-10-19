@@ -258,6 +258,7 @@ export function overlayJsonl(cards: Map<string, CardState>, notes: Map<string, U
 
 /**
  * ファイルとして保存する。iPhone では共有シート →「"ファイル"に保存」で iCloud Drive に置ける
+ * 共有にはファイルだけを渡す（title も渡すと、iPhone はファイル名だけが書かれた .txt も一緒に保存してしまう）
  * 戻り値: 保存できたか（キャンセルなら false）
  */
 export async function saveTextFile(filename: string, text: string, mime: string): Promise<boolean> {
@@ -265,7 +266,7 @@ export async function saveTextFile(filename: string, text: string, mime: string)
   const nav = navigator as Navigator & { canShare?: (d: ShareData) => boolean };
   if (nav.canShare?.({ files: [file] })) {
     try {
-      await nav.share({ files: [file], title: filename });
+      await nav.share({ files: [file] });
       return true;
     } catch (e) {
       if ((e as DOMException).name === "AbortError") return false;

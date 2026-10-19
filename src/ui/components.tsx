@@ -2,6 +2,7 @@
 import type { ReactNode } from "react";
 import { noLabel } from "../data/stats";
 import { tipsButtonLabel, type TipsRef } from "../data/tips";
+import { exampleMissesWord, exampleText, vocabFromExplanation } from "../lib/itemText";
 import { canSpeak, filledSentence, speak } from "../lib/speech";
 import { LETTERS, type CardState, type ChapterInfo, type DeruItem, type Item, type KinfreItem, type Status, type UserNote } from "../types";
 
@@ -69,15 +70,29 @@ export function SpeakButton({ text, label, rate }: { text: string; label: string
   );
 }
 
+/** バックアップの保存先の案内。アプリは保存先を選べない（共有の画面で選ぶ）ので、書き出すボタンのそばに毎回出す */
+export function BackupPlaceHint({ place }: { place: string }) {
+  return (
+    <div className="backup-place">
+      <p>
+        保存先：<b>{place}</b>
+      </p>
+      <p className="sub">
+        書き出すと共有の画面が開きます →「"ファイル"に保存」→ この場所を開いて「保存」。Mac でダウンロードされたときは、ファイルをこの場所へ移してください。
+      </p>
+    </div>
+  );
+}
+
 /** 教材の訳・例文・補足と、自分のメモ */
 export function ItemInfo({ item, note, card, speechRate }: { item: KinfreItem; note?: UserNote; card?: CardState; speechRate?: number }) {
-  const example = item.example_en_blank || item.example_en;
+  const example = exampleText(item);
   return (
     <div className="item-info">
       <p className="ja">{item.ja}</p>
       <div className="speak-row">
         <SpeakButton text={item.word} label="単語" rate={speechRate} />
-        {item.example_en && <SpeakButton text={item.example_en} label="例文" rate={speechRate} />}
+        {example && <SpeakButton text={example} label="例文" rate={speechRate} />}
       </div>
       {(example || item.example_ja) && (
         <div className="example">
@@ -86,11 +101,12 @@ export function ItemInfo({ item, note, card, speechRate }: { item: KinfreItem; n
               {example}
             </p>
           )}
+          {example && exampleMissesWord(item) && <p className="example-warn">⚠ この例文は見出し語が読み取れていません（教材データの読み取り漏れ。公式音声から補う予定）</p>}
           {item.example_ja && <p className="example-ja">{item.example_ja}</p>}
         </div>
       )}
       {item.notes_right && (
-        <details className="notes">
+        <details className="notes" open>
           <summary>右欄の補足（教材）</summary>
           <p>{item.notes_right}</p>
         </details>
@@ -178,6 +194,33 @@ export function choiceLabel(item: DeruItem, i: number): string {
   return `(${LETTERS[i]}) ${item.choices[i] ?? ""}`;
 }
 
+/** 語彙。本の語注（注）があればそれを、無ければ解説に出てくる「英語（訳）」を拾って見せる */
+export function Part5Vocab({ item }: { item: DeruItem }) {
+  if (item.vocab) {
+    return (
+      <details className="notes" open>
+        <summary>語彙</summary>
+        <p className="pre">{item.vocab}</p>
+      </details>
+    );
+  }
+  const pairs = vocabFromExplanation(item.explanation);
+  if (pairs.length === 0) return <p className="sub vocab-none">語彙：この問題には本の語注（注）がありません</p>;
+  return (
+    <details className="notes" open>
+      <summary>語彙（解説に出てくる語句）</summary>
+      <p className="sub">この問題には本の語注（注）がありません。解説の中の「英語（訳）」を拾っています。</p>
+      <ul className="vocab-list">
+        {pairs.map((p) => (
+          <li key={p.en}>
+            <span lang="en">{p.en}</span>：{p.ja}
+          </li>
+        ))}
+      </ul>
+    </details>
+  );
+}
+
 /** 回答後に見せる中身（解説・全訳・語彙・章の解き方）。解説は × とあやふやのとき開いておく */
 export function Part5Info({
   item,
@@ -220,12 +263,7 @@ export function Part5Info({
           <p className="pre">{item.translation}</p>
         </details>
       )}
-      {item.vocab && (
-        <details className="notes">
-          <summary>語彙</summary>
-          <p className="pre">{item.vocab}</p>
-        </details>
-      )}
+      <Part5Vocab item={item} />
       {tips && onOpenTips && (
         <button className="btn ghost tips-btn" onClick={onOpenTips}>
           📖 {tipsButtonLabel(tips)}
