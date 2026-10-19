@@ -161,11 +161,13 @@ export type Settings = {
   deruSetSize: number;
   deruHardMs: number;
   deruNewPerDay: number;
+  deruAlwaysExplain: boolean; // 回答後、正誤・あやふやに関係なく解説と全訳を開いておく（自動で次へは進まない）
   // 共通
   reviewRatio: number; // 今日の学習で復習が占める割合
   examDate: string; // YYYY-MM-DD
   retention: number; // FSRS の目標保持率
   autoNext: boolean;
+  speechRate: number; // 発音ボタンの読み上げの速さ（1 がふつう）
 };
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -178,10 +180,12 @@ export const DEFAULT_SETTINGS: Settings = {
   deruSetSize: 10,
   deruHardMs: 30000, // 本の目安は1問20〜30秒
   deruNewPerDay: 20,
+  deruAlwaysExplain: true,
   reviewRatio: 0.7,
   examDate: "2026-12-19",
   retention: 0.9,
   autoNext: true,
+  speechRate: 0.9,
 };
 
 /** 教材ごとに分かれている設定を取り出す */

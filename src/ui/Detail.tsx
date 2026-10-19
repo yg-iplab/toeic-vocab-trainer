@@ -67,7 +67,14 @@ export function Detail({ store, id, onBack }: { store: Store; id: string; onBack
               </li>
             ))}
           </ul>
-          <Part5Info item={item} chapter={chapter} openExplanation tips={tipsRef} onOpenTips={() => setTipsOpen(true)} />
+          <Part5Info
+            item={item}
+            chapter={chapter}
+            openExplanation
+            tips={tipsRef}
+            onOpenTips={() => setTipsOpen(true)}
+            speechRate={store.settings.speechRate}
+          />
         </section>
       ) : (
         <section className="card">
@@ -76,7 +83,7 @@ export function Detail({ store, id, onBack }: { store: Store; id: string; onBack
             {item.section}
             {item.track !== undefined && ` / track ${item.track}`}
           </p>
-          <ItemInfo item={item} />
+          <ItemInfo item={item} speechRate={store.settings.speechRate} />
         </section>
       )}
 

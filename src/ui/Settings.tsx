@@ -294,6 +294,10 @@ export function Settings({ store }: { store: Store }) {
           format={(n) => `${n}問`}
           onChange={(n) => update({ deruNewPerDay: n })}
         />
+        <label className="check">
+          <input type="checkbox" checked={s.deruAlwaysExplain} onChange={(e) => update({ deruAlwaysExplain: e.target.checked })} />
+          回答後、解説と全訳をいつも開く（迷わず正解でも。自動で次へは進まない）
+        </label>
       </section>
 
       <section className="card form">
@@ -320,8 +324,16 @@ export function Settings({ store }: { store: Store }) {
           <input type="checkbox" checked={s.autoNext} onChange={(e) => update({ autoNext: e.target.checked })} />
           迷わず正解したら自動で次へ
         </label>
+        <Choice
+          label="発音ボタンの読み上げの速さ"
+          value={s.speechRate}
+          options={[0.7, 0.8, 0.9, 1]}
+          format={(n) => (n === 1 ? "ふつう" : `${Math.round(n * 100)}%`)}
+          onChange={(n) => update({ speechRate: n })}
+        />
+        <p className="sub">🔊 のボタンは端末の読み上げ機能（合成音声）で読みます。公式の音声ではありません。iPhone で鳴らないときは、マナーモード（消音）を切ってください。</p>
       </section>
-      <p className="footer-note">TOEIC単語・文法トレーナー v0.3（個人用の非公式ツール）・教材データはこの端末の中だけにあります</p>
+      <p className="footer-note">TOEIC単語・文法トレーナー v0.4（個人用の非公式ツール）・教材データはこの端末の中だけにあります</p>
     </div>
   );
 }

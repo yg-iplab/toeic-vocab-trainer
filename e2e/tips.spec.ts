@@ -145,6 +145,7 @@ test("解き方：読み込み → ホーム・回答後・詳細から読む �
     await expect(page.locator(".feedback")).toBeVisible();
     await page.waitForTimeout(900);
     if (await next.isVisible()) await next.click();
+    await expect(page.locator(".feedback")).toBeHidden(); // 次の問題か結果の画面に変わるまで待つ
   }
   await expect(page.locator(".score")).toBeVisible();
 
@@ -192,6 +193,7 @@ test("解き方：読み込み → ホーム・回答後・詳細から読む �
     await page.waitForTimeout(900);
     const next = page.getByRole("button", { name: "次へ" });
     if (await next.isVisible()) await next.click();
+    await expect(page.locator(".feedback")).toBeHidden(); // 次の問題か結果の画面に変わるまで待つ
   }
   expect(similarNos.length).toBeGreaterThan(0);
   // 分野Xは奇数番。まだ解いていなかった問題だけ

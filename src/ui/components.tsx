@@ -2,6 +2,7 @@
 import type { ReactNode } from "react";
 import { noLabel } from "../data/stats";
 import { tipsButtonLabel, type TipsRef } from "../data/tips";
+import { canSpeak, filledSentence, speak } from "../lib/speech";
 import { LETTERS, type CardState, type ChapterInfo, type DeruItem, type Item, type KinfreItem, type Status, type UserNote } from "../types";
 
 export const STATUS_LABEL: Record<Status, string> = {
@@ -58,12 +59,26 @@ export function WordHead({ item }: { item: KinfreItem }) {
   );
 }
 
+/** 発音を聞くボタン（端末の読み上げ機能。読めない端末では出さない） */
+export function SpeakButton({ text, label, rate }: { text: string; label: string; rate?: number }) {
+  if (!canSpeak() || !text.trim()) return null;
+  return (
+    <button type="button" className="speak-btn" onClick={() => speak(text, rate)}>
+      🔊 {label}
+    </button>
+  );
+}
+
 /** 教材の訳・例文・補足と、自分のメモ */
-export function ItemInfo({ item, note, card }: { item: KinfreItem; note?: UserNote; card?: CardState }) {
+export function ItemInfo({ item, note, card, speechRate }: { item: KinfreItem; note?: UserNote; card?: CardState; speechRate?: number }) {
   const example = item.example_en_blank || item.example_en;
   return (
     <div className="item-info">
       <p className="ja">{item.ja}</p>
+      <div className="speak-row">
+        <SpeakButton text={item.word} label="単語" rate={speechRate} />
+        {item.example_en && <SpeakButton text={item.example_en} label="例文" rate={speechRate} />}
+      </div>
       {(example || item.example_ja) && (
         <div className="example">
           {example && (
@@ -172,6 +187,7 @@ export function Part5Info({
   card,
   tips,
   onOpenTips,
+  speechRate,
 }: {
   item: DeruItem;
   chapter?: ChapterInfo;
@@ -180,12 +196,18 @@ export function Part5Info({
   card?: CardState;
   tips?: TipsRef; // 解き方の全文（読み込んであれば）
   onOpenTips?: () => void;
+  speechRate?: number;
 }) {
+  const answerText = item.choices[LETTERS.indexOf(item.answer)] ?? "";
   return (
     <div className="item-info p5-info">
       <p className="p5-answer">
         正解 <b lang="en">{choiceLabel(item, LETTERS.indexOf(item.answer))}</b>
       </p>
+      <div className="speak-row">
+        <SpeakButton text={filledSentence(item.stem, answerText)} label="正解の文を聞く" rate={speechRate} />
+        <SpeakButton text={answerText} label="正解の語句" rate={speechRate} />
+      </div>
       {item.explanation && (
         <details className="notes" open={openExplanation}>
           <summary>解説</summary>

@@ -1173,3 +1173,27 @@ code {
   color: var(--muted);
   font-weight: 400;
 }
+
+/* 発音ボタン（端末の読み上げ機能） */
+.speak-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 4px 0 6px;
+}
+
+.speak-row:empty {
+  display: none;
+}
+
+.speak-btn {
+  min-height: 40px;
+  padding: 6px 12px;
+  border: 1.5px solid var(--accent);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--accent);
+  font-weight: 600;
+  font-size: 0.88rem;
+  cursor: pointer;
+}

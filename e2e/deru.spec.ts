@@ -76,17 +76,20 @@ async function answerPart5(page: Page, wrongNos: Set<number>, unsureNos: Set<num
     await expect(page.getByText("× 不正解")).toBeVisible();
     await expect(page.getByText(`架空の解説${n}`)).toBeVisible(); // ×のときは解説が開いている
     await page.getByRole("button", { name: "次へ" }).click();
+    await expect(page.locator(".feedback")).toBeHidden(); // 次の問題か結果の画面に変わるまで待つ
   } else if (unsure) {
     await page.locator(".choice", { hasText: right }).click();
     await expect(page.getByText("○ 正解")).toBeVisible();
     await expect(page.getByText(`架空の解説${n}`)).toBeVisible(); // あやふやで正解しても解説が開く
     await page.screenshot({ path: "test-results/deru_03_unsure.png", fullPage: true });
     await page.getByRole("button", { name: "次へ" }).click();
+    await expect(page.locator(".feedback")).toBeHidden(); // 次の問題か結果の画面に変わるまで待つ
   } else {
     await page.locator(".choice", { hasText: right }).click();
-    await expect(page.locator(".feedback")).toBeVisible();
-    await expect(page.getByText(`架空の解説${n}`)).toBeHidden(); // 迷わず正解なら解説は閉じたまま
-    await page.waitForTimeout(900); // 自動で次へ
+    await expect(page.getByText("○ 正解")).toBeVisible();
+    await expect(page.getByText(`架空の解説${n}`)).toBeVisible(); // 既定では迷わず正解でも解説を開く（自動で次へは進まない）
+    await page.getByRole("button", { name: "次へ" }).click();
+    await expect(page.locator(".feedback")).toBeHidden(); // 次の問題か結果の画面に変わるまで待つ
   }
 }
 

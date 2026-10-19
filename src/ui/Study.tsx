@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { recordAnswer } from "../data/record";
 import { tipsForItem } from "../data/tips";
 import { formatInterval } from "../lib/date";
+import { stopSpeaking } from "../lib/speech";
 import { RATING_LABEL, ratingForChoice } from "../srs/rating";
 import { previewDue } from "../srs/scheduler";
 import { poolOf, requeueIfWrong } from "../srs/session";
@@ -68,6 +69,8 @@ export function Study({
   const q = queue[index];
   const format: Format = q?.item.deck === "deru1000" ? "part5" : q?.choices ? "mc" : "flip";
   const hardMs = deckSettings(settings, session.deck).hardMs;
+  // 文法は設定しだいで、毎回解説を開いておく（そのときは自動で次へ進めない）
+  const alwaysExplain = q?.item.deck === "deru1000" && settings.deruAlwaysExplain;
 
   useEffect(() => {
     setStartedAt(performance.now());
@@ -76,17 +79,25 @@ export function Study({
     setFeedback(null);
     setTipsOpen(false);
     tipsSeen.current = false;
+    stopSpeaking();
   }, [index]);
+
+  useEffect(() => stopSpeaking, []);
 
   // 直前の回答で増えた「もう一度」と結果を取りこぼさないよう、最新の値を受け取れるようにする
   const goNext = (curQueue: Question[] = queue, curResults: AnswerResult[] = results) => {
-    if (index + 1 >= curQueue.length) onFinish(curResults);
-    else setIndex(index + 1);
+    if (index + 1 >= curQueue.length) return onFinish(curResults);
+    // 次の問題の最初の表示に、前の問題の正誤（押せないボタン）が一瞬残らないよう、同じ更新でリセットする
+    setFeedback(null);
+    setUnsure(false);
+    setRevealed(false);
+    setTipsOpen(false);
+    setIndex(index + 1);
   };
 
   // 迷わず正解したときは、テンポよく自動で次へ
   useEffect(() => {
-    if (!feedback || !feedback.correct || feedback.rating !== 3 || !settings.autoNext || tipsOpen || tipsSeen.current) return;
+    if (!feedback || !feedback.correct || feedback.rating !== 3 || !settings.autoNext || alwaysExplain || tipsOpen || tipsSeen.current) return;
     const t = setTimeout(() => goNext(), 700);
     return () => clearTimeout(t);
     // feedback が変わったとき（と解き方を開いたとき）だけ動かす
@@ -237,7 +248,7 @@ export function Study({
 
       {format === "flip" && revealed && previews && item.deck === "kinfre" && (
         <>
-          <ItemInfo item={item} note={note} card={card} />
+          <ItemInfo item={item} note={note} card={card} speechRate={settings.speechRate} />
           <div className="rate-grid">
             {([1, 2, 3, 4] as Rating[]).map((r) => (
               <button key={r} className={`rate rate-${r}`} onClick={() => rate(r)}>
@@ -272,14 +283,15 @@ export function Study({
             <Part5Info
               item={item}
               chapter={chapter}
-              openExplanation={!feedback.correct || feedback.unsure}
+              openExplanation={alwaysExplain || !feedback.correct || feedback.unsure}
               note={note}
               card={feedback.card}
               tips={tipsRef}
               onOpenTips={openTips}
+              speechRate={settings.speechRate}
             />
           ) : (
-            <ItemInfo item={item} note={note} card={feedback.card} />
+            <ItemInfo item={item} note={note} card={feedback.card} speechRate={settings.speechRate} />
           )}
           <button className="btn big" onClick={() => goNext()}>
             次へ
