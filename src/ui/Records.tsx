@@ -1,10 +1,11 @@
 // 記録画面（ミス一覧・周回ごとの成績・範囲別の進み具合）
 import { useMemo, useState } from "react";
 import { roundDeck } from "../data/rounds";
-import { groupStats, itemsOfDeck, missedItems, noLabel, roundStats, unit } from "../data/stats";
+import { groupStats, itemsOfDeck, missedItems, noLabel, passRates, roundStats, unit } from "../data/stats";
 import { formatDateTime } from "../lib/date";
 import type { Item, Round } from "../types";
 import { ProgressBar, RowText, StatusBadge, TopBar } from "./components";
+import { PassChart } from "./PassChart";
 import type { Store } from "./store";
 
 type Tab = "miss" | "round" | "range";
@@ -30,6 +31,10 @@ export function Records({
     [store.rounds, store.logs, deck],
   );
   const groups = useMemo(() => groupStats(items, store.cards, store.chapters), [items, store.cards, store.chapters]);
+  const passes = useMemo(
+    () => passRates(items, store.rounds.filter((r) => roundDeck(r) === deck), store.logs, store.chapters),
+    [items, store.rounds, store.logs, store.chapters, deck],
+  );
 
   const q = query.trim().toLowerCase();
   const matches = (i: Item) => {
@@ -131,6 +136,8 @@ export function Records({
             );
           })
         ))}
+
+      {tab === "range" && <PassChart groups={passes} unit={u} />}
 
       {tab === "range" && (
         <ul className="list groups">

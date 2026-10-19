@@ -5,9 +5,9 @@
 //   - 章: （レベル名） / track 1
 //   - 品詞: 名 / 動
 //   - 日本語訳: ...
-import type { ChapterInfo, Item, KinfreItem } from "../types";
+import type { ChapterInfo, Item, KinfreItem, TipsDoc } from "../types";
 
-export type ParseResult<T extends Item = Item> = { items: T[]; skipped: string[]; chapters?: ChapterInfo[] };
+export type ParseResult<T extends Item = Item> = { items: T[]; skipped: string[]; chapters?: ChapterInfo[]; tips?: TipsDoc[] };
 
 const EMPTY_VALUES = new Set(["", "—", "-", "（未記入）", "（未収録）", "None", "null"]);
 

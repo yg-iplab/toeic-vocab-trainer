@@ -20,6 +20,7 @@ export function Home({
   onNewRound,
   onBackup,
   onGoSettings,
+  onOpenTips,
 }: {
   store: Store;
   activeRound?: Round;
@@ -29,6 +30,7 @@ export function Home({
   onNewRound: () => void;
   onBackup: () => void;
   onGoSettings: () => void;
+  onOpenTips: () => void;
 }) {
   const now = Date.now();
   const today = localDay(now);
@@ -160,6 +162,21 @@ export function Home({
               </>
             )}
           </section>
+
+          {deck === "deru1000" && (
+            <section className="card">
+              <h2>解き方</h2>
+              {store.tips.size > 0 ? (
+                <button className="btn ghost" onClick={onOpenTips}>
+                  📖 解き方を読む（{store.tips.size}本）
+                </button>
+              ) : (
+                <p className="sub">
+                  設定 →「教材データを読み込む」で Drive の <code>deru1000/tips/</code> の .md も選ぶと、章ごとの解き方を読めます（回答後の「この章の解き方」からも開けます）。
+                </p>
+              )}
+            </section>
+          )}
 
           <section className="card stats-row">
             <div>

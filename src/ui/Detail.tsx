@@ -1,11 +1,13 @@
 // 1問・1語の詳細（教材の訳や解説・自分のメモ・回答履歴）
 import { useState } from "react";
 import { db } from "../data/db";
+import { tipsForItem } from "../data/tips";
 import { formatDateTime } from "../lib/date";
 import { RATING_LABEL } from "../srs/rating";
 import { LETTERS, type ReviewLog } from "../types";
 import { choiceLabel, ItemInfo, Part5Head, Part5Info, StatusBadge, TopBar, WordHead } from "./components";
 import type { Store } from "./store";
+import { TipsSheetFor } from "./Tips";
 
 export function Detail({ store, id, onBack }: { store: Store; id: string; onBack: () => void }) {
   const item = store.itemsById.get(id);
@@ -16,6 +18,7 @@ export function Detail({ store, id, onBack }: { store: Store; id: string; onBack
   // 単語は「自分の例文」（custom_example）、文法は「メモ」（custom_note）。既存オーバーレイの項目名に合わせる
   const [extra, setExtra] = useState((item?.deck === "deru1000" ? note?.custom_note : note?.custom_example) ?? "");
   const [saved, setSaved] = useState(false);
+  const [tipsOpen, setTipsOpen] = useState(false);
 
   if (!item) {
     return (
@@ -28,6 +31,7 @@ export function Detail({ store, id, onBack }: { store: Store; id: string; onBack
 
   const logs = store.logs.filter((l) => l.id === id).sort((a, b) => b.ts - a.ts);
   const chapter = item.deck === "deru1000" ? store.chapters.get(item.chapter) : undefined;
+  const tipsRef = item.deck === "deru1000" ? tipsForItem(item, store.tips, store.chapterOfSection) : undefined;
 
   const save = async () => {
     const extraField = item.deck === "deru1000" ? { custom_note: extra.trim() } : { custom_example: extra.trim() };
@@ -63,7 +67,7 @@ export function Detail({ store, id, onBack }: { store: Store; id: string; onBack
               </li>
             ))}
           </ul>
-          <Part5Info item={item} chapter={chapter} openExplanation />
+          <Part5Info item={item} chapter={chapter} openExplanation tips={tipsRef} onOpenTips={() => setTipsOpen(true)} />
         </section>
       ) : (
         <section className="card">
@@ -142,6 +146,7 @@ export function Detail({ store, id, onBack }: { store: Store; id: string; onBack
           </table>
         )}
       </section>
+      {tipsOpen && tipsRef && <TipsSheetFor tipsRef={tipsRef} onClose={() => setTipsOpen(false)} />}
     </div>
   );
 }

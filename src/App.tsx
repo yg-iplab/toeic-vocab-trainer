@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { db } from "./data/db";
 import { ensurePersisted, isStandalone } from "./data/persist";
 import { pickActiveRound, pickNextRoundNo, roundDeck, startMissedRound, startRound } from "./data/rounds";
-import { logsOfDeck, newIntroducedOn, roundStats } from "./data/stats";
+import { logsOfDeck, newIntroducedOn, recentMissIds, roundStats } from "./data/stats";
 import { localDay } from "./lib/date";
 import { buildDailySet, buildRoundSet, poolOf, type RoundScope } from "./srs/session";
 import type { Round } from "./types";
@@ -15,11 +15,13 @@ import { RoundSetup } from "./ui/RoundSetup";
 import { exportBackup, Settings } from "./ui/Settings";
 import { useStore } from "./ui/store";
 import { Study, type AnswerResult, type Session } from "./ui/Study";
+import { TipsList } from "./ui/Tips";
 
 type Tab = "home" | "records" | "settings";
 type Screen =
   | { name: Tab }
   | { name: "roundSetup" }
+  | { name: "tips" }
   | { name: "study"; session: Session }
   | { name: "result"; session: Session; results: AnswerResult[] }
   | { name: "detail"; id: string; back: Screen };
@@ -51,6 +53,7 @@ export default function App() {
 
   const startDaily = () => {
     const now = Date.now();
+    const deckLogs = logsOfDeck(store.logs, deck);
     const questions = buildDailySet({
       items: store.items,
       cards: store.cards,
@@ -58,7 +61,8 @@ export default function App() {
       now,
       rng: Math.random,
       scheduler: store.scheduler,
-      newIntroducedToday: newIntroducedOn(logsOfDeck(store.logs, deck), localDay(now)),
+      newIntroducedToday: newIntroducedOn(deckLogs, localDay(now)),
+      recentMissIds: recentMissIds(deckLogs, now),
     });
     begin({ deck, mode: "daily", label: "今日の学習", questions });
   };
@@ -105,6 +109,7 @@ export default function App() {
           onNewRound={() => setScreen({ name: "roundSetup" })}
           onBackup={() => exportBackup(store)}
           onGoSettings={() => setScreen({ name: "settings" })}
+          onOpenTips={() => setScreen({ name: "tips" })}
         />
       );
       break;
@@ -113,6 +118,9 @@ export default function App() {
       break;
     case "settings":
       body = <Settings store={store} />;
+      break;
+    case "tips":
+      body = <TipsList store={store} onBack={() => setScreen({ name: "home" })} />;
       break;
     case "roundSetup":
       body = <RoundSetup store={store} activeRound={activeRound} nextNo={nextNo} onStart={newRound} onBack={() => setScreen({ name: "home" })} />;

@@ -1,6 +1,6 @@
 // 端末内データベース（IndexedDB）。Dexie は IndexedDB を使いやすくする道具
 import Dexie, { type Table } from "dexie";
-import type { CardState, ChapterInfo, Item, ReviewLog, Round, Settings, UserNote } from "../types";
+import type { CardState, ChapterInfo, Item, ReviewLog, Round, Settings, TipsDoc, UserNote } from "../types";
 import { DEFAULT_SETTINGS } from "../types";
 import { mergeChapters } from "./parseDeru";
 
@@ -17,6 +17,7 @@ export class TrainerDB extends Dexie {
   rounds!: Table<Round, number>;
   meta!: Table<MetaRow, string>;
   chapters!: Table<ChapterInfo, string>;
+  tips!: Table<TipsDoc, string>;
 
   constructor(name = DB_NAME) {
     super(name);
@@ -50,6 +51,10 @@ export class TrainerDB extends Dexie {
             if (!r.deck) r.deck = "kinfre";
           });
       });
+    // 版3（Phase 2b・文法の解き方の全文を章ごとに）。表を1つ足すだけで、版2までの表には触らない
+    this.version(3).stores({
+      tips: "key",
+    });
   }
 }
 
@@ -89,4 +94,9 @@ export async function upsertItems(items: Item[], chapters: ChapterInfo[] = []) {
     }
     await setMeta("itemsImportedAt", Date.now());
   });
+}
+
+/** 文法の解き方を取り込む（同じ章は新しいファイルで置き換える）。学習記録には触らない */
+export async function upsertTips(docs: TipsDoc[]) {
+  await db.tips.bulkPut(docs);
 }

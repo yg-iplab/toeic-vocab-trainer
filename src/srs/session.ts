@@ -1,5 +1,6 @@
 // 1セット（既定10問）の出題を組み立てる部分
 import type { FSRS } from "ts-fsrs";
+import { sameSectionTag, sectionTag } from "../data/sections";
 import { shuffle, type Rng } from "../lib/random";
 import {
   deckSettings,
@@ -108,7 +109,34 @@ type DailyArgs = {
   scheduler: FSRS;
   newIntroducedToday: number; // この教材で今日はじめて解いた数
   deck?: Deck; // 省略時は表示中の教材
+  recentMissIds?: string[]; // 最近ミスした問題（新しい順）。文法の類題に使う
 };
+
+/**
+ * 文法の類題：最近ミスした問題と同じ分野の、まだ解いていない問題
+ * ミスの新しい分野から順に、分野を入れ替えながら1問ずつ並べる（同じ分野ばかりにならないように）
+ */
+export function similarFresh(fresh: Item[], missed: Item[]): Item[] {
+  const tags: string[] = [];
+  for (const m of missed) {
+    if (m.deck !== "deru1000" || !m.section) continue;
+    const t = sectionTag(m.section);
+    if (!tags.some((x) => sameSectionTag(x, t))) tags.push(t);
+  }
+  const groups = tags.map((t) => fresh.filter((i) => i.deck === "deru1000" && sameSectionTag(sectionTag(i.section), t)));
+  const out: Item[] = [];
+  const seen = new Set<string>();
+  for (let k = 0; groups.some((g) => k < g.length); k++) {
+    for (const g of groups) {
+      const i = g[k];
+      if (i && !seen.has(i.id)) {
+        out.push(i);
+        seen.add(i.id);
+      }
+    }
+  }
+  return out;
+}
 
 export function dueItems(items: Item[], cards: Map<string, CardState>, now: number, scheduler: FSRS): Item[] {
   const r = (i: Item) => retrievability(cards.get(i.id), now, scheduler);
@@ -124,6 +152,7 @@ export function dueItems(items: Item[], cards: Map<string, CardState>, now: numb
  * 今日の学習（忘却曲線モード）。表示中の教材だけで組む
  * - 約7割: 復習期限が来た問題。思い出せる確率が低い順（ミスした問題ほど早く・多く戻る）
  * - 約3割: 他の問題。しつこい苦手（期限前でも1問）→ 新しい問題 → しばらく見ていない問題
+ *   文法の「新しい問題」の枠は、最近ミスした分野と同じ分野の問題（類題）を先に出す（埋め合わせは番号順のまま）
  * どちらかが足りなければ、もう片方で埋める
  */
 export function buildDailySet(a: DailyArgs): Question[] {
@@ -158,12 +187,19 @@ export function buildDailySet(a: DailyArgs): Question[] {
   const newAllowed = Math.max(0, newPerDay - a.newIntroducedToday);
   const stale = notDue.slice().sort((x, y) => r(x) - r(y));
 
+  const byId = new Map(pool.map((i) => [i.id, i]));
+  const missed = (a.recentMissIds ?? []).map((id) => byId.get(id)).filter((i): i is Item => i !== undefined);
+  const similar = deck === "deru1000" ? similarFresh(fresh, missed) : [];
+  const newCount = () => picked.filter((q) => q.source === "new" || q.source === "similar").length;
+  const newRoom = Math.min(newAllowed, Math.ceil(othersRoom / 2));
+
   take(leeches, 1, "leech");
-  take(fresh, Math.min(newAllowed, Math.ceil(othersRoom / 2)), "new");
+  take(similar, newRoom, "similar");
+  take(fresh, newRoom - newCount(), "new");
   take(stale, size, "other");
   // まだ足りなければ、残りの復習 → 新しい問題で埋める
   take(due, size, "due");
-  take(fresh, Math.max(0, newAllowed - picked.filter((q) => q.source === "new").length), "new");
+  take(fresh, Math.max(0, newAllowed - newCount()), "new");
 
   return shuffle(picked, rng);
 }

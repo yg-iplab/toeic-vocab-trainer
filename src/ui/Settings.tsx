@@ -13,12 +13,12 @@ import {
   restoreBackup,
   saveTextFile,
 } from "../data/backup";
-import { db, saveSettings, upsertItems } from "../data/db";
+import { db, saveSettings, upsertItems, upsertTips } from "../data/db";
 import { mergeChapters } from "../data/parseDeru";
 import { parseMaterialFile } from "../data/parseFile";
 import { ensurePersisted, isStandalone, type PersistState } from "../data/persist";
 import { formatDateTime, localDay } from "../lib/date";
-import type { ChapterInfo, Item, Settings as SettingsT } from "../types";
+import type { ChapterInfo, Item, Settings as SettingsT, TipsDoc } from "../types";
 import { TopBar } from "./components";
 import type { Store } from "./store";
 
@@ -82,19 +82,24 @@ export function Settings({ store }: { store: Store }) {
     if (!files || files.length === 0) return;
     const all: Item[] = [];
     let chapters: ChapterInfo[] = [];
+    const tips = new Map<string, TipsDoc>();
     const skip: string[] = [];
+    const now = Date.now();
     for (const f of Array.from(files)) {
-      const r = parseMaterialFile(f.name, await f.text());
+      const r = parseMaterialFile(f.name, await f.text(), now);
       all.push(...r.items);
       if (r.chapters) chapters = mergeChapters(chapters, r.chapters);
+      for (const t of r.tips ?? []) tips.set(t.key, t);
       skip.push(...r.skipped.map((x) => `${f.name}: ${x}`));
+      if (r.items.length === 0 && !r.tips?.length && r.skipped.length === 0) skip.push(`${f.name}: 教材のファイルではないので飛ばしました`);
     }
-    if (all.length === 0) {
-      setMsg("読み込める問題がありませんでした。kinfre/chapters または deru1000/chapters の .md ファイルを選んでください。");
+    if (all.length === 0 && tips.size === 0) {
+      setMsg("読み込める問題がありませんでした。kinfre/chapters・deru1000/chapters・deru1000/tips の .md ファイルを選んでください。");
       setSkipped(skip);
       return;
     }
-    await upsertItems(all, chapters);
+    if (all.length) await upsertItems(all, chapters);
+    if (tips.size) await upsertTips([...tips.values()]);
     await store.reload();
     const words = all.filter((i) => i.deck === "kinfre");
     const grammar = all.filter((i) => i.deck === "deru1000");
@@ -104,6 +109,10 @@ export function Settings({ store }: { store: Store }) {
       parts.push(`${words.length}語を読み込みました（本編 ${main}・Supplement ${words.length - main}）。`);
     }
     if (grammar.length) parts.push(`文法 ${grammar.length}問を読み込みました（章・模試セット ${chapters.length}）。`);
+    if (tips.size) {
+      const list = [...tips.values()].sort((a, b) => a.order - b.order).map((t) => (t.key === "intro" ? "巻頭" : `第${t.order}章`));
+      parts.push(`解き方 ${tips.size}本を読み込みました（${list.join("・")}）。`);
+    }
     setMsg(`${parts.join("")}学習記録はそのままです。`);
     setSkipped(skip);
   };
@@ -148,6 +157,7 @@ export function Settings({ store }: { store: Store }) {
   const words = store.items.filter((i) => i.deck === "kinfre");
   const main = words.filter((i) => i.deck === "kinfre" && i.part === "main").length;
   const grammar = store.items.filter((i) => i.deck === "deru1000").length;
+  const tipsCount = store.tips.size;
 
   return (
     <div className="screen settings">
@@ -201,10 +211,10 @@ export function Settings({ store }: { store: Store }) {
       <section className="card">
         <h2>教材データ</h2>
         <p>
-          単語 {words.length}語（本編 {main}・Supplement {words.length - main}）／文法 {grammar}問
+          単語 {words.length}語（本編 {main}・Supplement {words.length - main}）／文法 {grammar}問／解き方 {tipsCount}本
         </p>
         <p className="sub">
-          Drive の <code>kinfre/chapters/</code>（単語）や <code>deru1000/chapters/</code>（文法）の .md ファイルをまとめて選びます。両方を一度に選んでもかまいません（iPhone は「ファイル」→ Google ドライブ）。読み込み直しても学習記録は消えません。
+          Drive の <code>kinfre/chapters/</code>（単語）、<code>deru1000/chapters/</code>（文法）、<code>deru1000/tips/</code>（文法の解き方 00〜07）の .md ファイルをまとめて選びます。一度に選んでもかまいません（iPhone は「ファイル」→ Google ドライブ）。読み込み直しても学習記録は消えません。
         </p>
         <label className="btn file">
           教材データを読み込む
@@ -311,7 +321,7 @@ export function Settings({ store }: { store: Store }) {
           迷わず正解したら自動で次へ
         </label>
       </section>
-      <p className="footer-note">TOEIC単語・文法トレーナー v0.2（個人用の非公式ツール）・教材データはこの端末の中だけにあります</p>
+      <p className="footer-note">TOEIC単語・文法トレーナー v0.3（個人用の非公式ツール）・教材データはこの端末の中だけにあります</p>
     </div>
   );
 }

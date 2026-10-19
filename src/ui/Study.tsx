@@ -1,6 +1,7 @@
 // 学習画面（単語：4択 / めくる、文法：Part 5）
 import { useEffect, useMemo, useRef, useState } from "react";
 import { recordAnswer } from "../data/record";
+import { tipsForItem } from "../data/tips";
 import { formatInterval } from "../lib/date";
 import { RATING_LABEL, ratingForChoice } from "../srs/rating";
 import { previewDue } from "../srs/scheduler";
@@ -8,6 +9,7 @@ import { poolOf, requeueIfWrong } from "../srs/session";
 import { deckSettings, type CardState, type Deck, type Format, type Question, type Rating } from "../types";
 import { choiceLabel, ItemInfo, Part5Head, Part5Info, ProgressBar, WordHead } from "./components";
 import type { Store } from "./store";
+import { TipsSheetFor } from "./Tips";
 
 export type Session = {
   deck: Deck;
@@ -56,6 +58,8 @@ export function Study({
   const [results, setResults] = useState<AnswerResult[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [startedAt, setStartedAt] = useState(() => performance.now());
+  const [tipsOpen, setTipsOpen] = useState(false);
+  const tipsSeen = useRef(false); // 解き方を開いた問題は、自動で次へ進めない
   const retries = useRef(new Map<string, number>());
   const revealMs = useRef(0);
   const busy = useRef(false);
@@ -70,6 +74,8 @@ export function Study({
     setUnsure(false);
     setRevealed(false);
     setFeedback(null);
+    setTipsOpen(false);
+    tipsSeen.current = false;
   }, [index]);
 
   // 直前の回答で増えた「もう一度」と結果を取りこぼさないよう、最新の値を受け取れるようにする
@@ -80,11 +86,11 @@ export function Study({
 
   // 迷わず正解したときは、テンポよく自動で次へ
   useEffect(() => {
-    if (!feedback || !feedback.correct || feedback.rating !== 3 || !settings.autoNext) return;
+    if (!feedback || !feedback.correct || feedback.rating !== 3 || !settings.autoNext || tipsOpen || tipsSeen.current) return;
     const t = setTimeout(() => goNext(), 700);
     return () => clearTimeout(t);
-    // feedback が変わったときだけ動かす
-  }, [feedback]);
+    // feedback が変わったとき（と解き方を開いたとき）だけ動かす
+  }, [feedback, tipsOpen]);
 
   async function submit(correct: boolean, rating: Rating, ms: number, chosen?: string) {
     if (busy.current || !q) return null;
@@ -157,6 +163,11 @@ export function Study({
   const previews = format === "flip" && revealed ? previewDue(card, q.item.id, Date.now(), scheduler) : null;
   const item = q.item;
   const chapter = item.deck === "deru1000" ? store.chapters.get(item.chapter) : undefined;
+  const tipsRef = item.deck === "deru1000" ? tipsForItem(item, store.tips, store.chapterOfSection) : undefined;
+  const openTips = () => {
+    tipsSeen.current = true;
+    setTipsOpen(true);
+  };
 
   return (
     <div className={`screen study ${format === "part5" ? "part5" : ""}`}>
@@ -176,6 +187,7 @@ export function Study({
       </div>
       <ProgressBar value={index} max={queue.length} label="セットの進み具合" />
       {q.retry && <p className="retry-tag">さっき間違えた{item.deck === "deru1000" ? "問題" : "語"}：もう一度</p>}
+      {q.source === "similar" && item.deck === "deru1000" && <p className="similar-tag">類題：最近ミスした分野（{item.section}）</p>}
 
       {item.deck === "deru1000" ? (
         <>
@@ -263,6 +275,8 @@ export function Study({
               openExplanation={!feedback.correct || feedback.unsure}
               note={note}
               card={feedback.card}
+              tips={tipsRef}
+              onOpenTips={openTips}
             />
           ) : (
             <ItemInfo item={item} note={note} card={feedback.card} />
@@ -273,6 +287,7 @@ export function Study({
         </div>
       )}
       {error && <p className="error">{error}</p>}
+      {tipsOpen && tipsRef && <TipsSheetFor tipsRef={tipsRef} onClose={() => setTipsOpen(false)} />}
     </div>
   );
 }

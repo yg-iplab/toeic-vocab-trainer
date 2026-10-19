@@ -1,6 +1,7 @@
 // 画面どうしで使い回す部品
 import type { ReactNode } from "react";
 import { noLabel } from "../data/stats";
+import { tipsButtonLabel, type TipsRef } from "../data/tips";
 import { LETTERS, type CardState, type ChapterInfo, type DeruItem, type Item, type KinfreItem, type Status, type UserNote } from "../types";
 
 export const STATUS_LABEL: Record<Status, string> = {
@@ -169,12 +170,16 @@ export function Part5Info({
   openExplanation,
   note,
   card,
+  tips,
+  onOpenTips,
 }: {
   item: DeruItem;
   chapter?: ChapterInfo;
   openExplanation: boolean;
   note?: UserNote;
   card?: CardState;
+  tips?: TipsRef; // 解き方の全文（読み込んであれば）
+  onOpenTips?: () => void;
 }) {
   return (
     <div className="item-info p5-info">
@@ -199,9 +204,14 @@ export function Part5Info({
           <p className="pre">{item.vocab}</p>
         </details>
       )}
+      {tips && onOpenTips && (
+        <button className="btn ghost tips-btn" onClick={onOpenTips}>
+          📖 {tipsButtonLabel(tips)}
+        </button>
+      )}
       {chapter && chapter.tips.length > 0 && (
         <details className="notes">
-          <summary>この章の解き方</summary>
+          <summary>{tips ? "章ファイル冒頭の要点" : "この章の解き方"}</summary>
           <dl className="tips">
             {chapter.tips.map((t) => (
               <div key={t.k}>

@@ -63,6 +63,16 @@ export type ChapterInfo = {
   tips: { k: string; v: string }[]; // 章ファイル冒頭の要点（解き方の手順など）
 };
 
+/** 文法の解き方（Drive の deru1000/tips/*.md 1本）。教材なので端末の中だけに置き、バックアップには入れない */
+export type TipsDoc = {
+  key: string; // 章は "c01"〜（ChapterInfo.key と同じ）、巻頭（使い方のページ）は "intro"
+  title: string; // ファイルの見出し
+  order: number; // 巻頭 0、章は章の番号
+  md: string; // ファイルの中身（Markdown）
+  fileName: string;
+  importedAt: number;
+};
+
 /** FSRS のカード（保存用に日付を数値にしたもの） */
 export type StoredFsrs = {
   due: number;
@@ -188,7 +198,8 @@ export type Question = {
   choiceIds?: string[]; // 記録用：単語は各選択肢がどの語の訳か、文法は記号（"A"…）
   answerIndex?: number;
   retry: boolean;
-  source: "due" | "leech" | "new" | "other" | "round" | "retry";
+  // similar＝最近ミスした分野と同じ分野の、まだ解いていない問題（文法の類題）
+  source: "due" | "leech" | "new" | "similar" | "other" | "round" | "retry";
 };
 
 export const LETTERS = "ABCDEFGH";
