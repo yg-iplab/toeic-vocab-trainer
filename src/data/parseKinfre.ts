@@ -5,9 +5,9 @@
 //   - 章: （レベル名） / track 1
 //   - 品詞: 名 / 動
 //   - 日本語訳: ...
-import type { Item } from "../types";
+import type { ChapterInfo, Item, KinfreItem } from "../types";
 
-export type ParseResult = { items: Item[]; skipped: string[] };
+export type ParseResult<T extends Item = Item> = { items: T[]; skipped: string[]; chapters?: ChapterInfo[] };
 
 const EMPTY_VALUES = new Set(["", "—", "-", "（未記入）", "（未収録）", "None", "null"]);
 
@@ -43,7 +43,7 @@ type RawEntry = {
 };
 
 /** Drive の表示で付くことがある Markdown のエスケープ（\# や \_）を外す */
-function unescapeMd(s: string): string {
+export function unescapeMd(s: string): string {
   return s.replace(/\\([\\`*_{}[\]()#+\-.!|~>])/g, "$1");
 }
 
@@ -77,7 +77,7 @@ function splitPos(v: string | undefined): string[] {
     .filter((s) => s && !EMPTY_VALUES.has(s));
 }
 
-function toItem(raw: RawEntry): Item | string {
+function toItem(raw: RawEntry): KinfreItem | string {
   const headWord = raw.heading.replace(/^\S+\s*/, "").trim();
   const id = clean(raw.id);
   if (!id) return `番号なし: ${raw.heading}`;
@@ -115,8 +115,8 @@ function toItem(raw: RawEntry): Item | string {
 }
 
 /** 章ファイル（Markdown）1本を読む */
-export function parseKinfreMarkdown(text: string): ParseResult {
-  const items: Item[] = [];
+export function parseKinfreMarkdown(text: string): ParseResult<KinfreItem> {
+  const items: KinfreItem[] = [];
   const skipped: string[] = [];
   let cur: RawEntry | null = null;
   let lastKey: keyof RawEntry | null = null;
@@ -161,8 +161,8 @@ export function parseKinfreMarkdown(text: string): ParseResult {
 }
 
 /** JSONL（1行1語。knowledge/schema.md の形）を読む */
-export function parseKinfreJsonl(text: string): ParseResult {
-  const items: Item[] = [];
+export function parseKinfreJsonl(text: string): ParseResult<KinfreItem> {
+  const items: KinfreItem[] = [];
   const skipped: string[] = [];
   text.split(/\r?\n/).forEach((line, i) => {
     if (!line.trim()) return;
@@ -198,7 +198,7 @@ export function parseKinfreJsonl(text: string): ParseResult {
 }
 
 /** ファイル名で読み分ける */
-export function parseKinfreFile(name: string, text: string): ParseResult {
+export function parseKinfreFile(name: string, text: string): ParseResult<KinfreItem> {
   if (/\.jsonl$/i.test(name)) return parseKinfreJsonl(text);
   return parseKinfreMarkdown(text);
 }

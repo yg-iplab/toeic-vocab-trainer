@@ -1,7 +1,7 @@
 // セット結果の画面
-import { noLabel } from "../data/stats";
+import { noLabel, unit } from "../data/stats";
 import type { Round } from "../types";
-import { ProgressBar } from "./components";
+import { ProgressBar, RowText } from "./components";
 import type { AnswerResult, Session } from "./Study";
 
 export function Result({
@@ -27,6 +27,8 @@ export function Result({
   const misses = results.filter((r) => !r.correct);
   const unsure = results.filter((r) => r.correct && r.rating === 2);
   const roundDone = round !== undefined && round.finishedAt !== undefined;
+  const u = unit(session.deck);
+  const what = session.deck === "deru1000" ? "問題" : "語";
 
   return (
     <div className="screen result">
@@ -35,7 +37,7 @@ export function Result({
         <p className="score-num">
           {correct} <span>/ {results.length} 正解</span>
         </p>
-        <p className="sub">回答はすべて保存しました。ミスした語は忘却曲線に合わせて早めに戻ってきます。</p>
+        <p className="sub">回答はすべて保存しました。ミスした{what}は忘却曲線に合わせて早めに戻ってきます。</p>
       </section>
 
       {round && (
@@ -44,11 +46,13 @@ export function Result({
           <p className="round-label">{round.label}</p>
           <ProgressBar value={round.cursor} max={round.itemIds.length} />
           <p className="sub">
-            {round.cursor} / {round.itemIds.length} 語{roundDone && `・この周のミス ${roundMissedIds.length}語`}
+            {round.cursor} / {round.itemIds.length} {u}
+            {roundDone && `・この周のミス ${roundMissedIds.length}${u}`}
           </p>
           {roundDone && roundMissedIds.length > 0 && (
             <button className="btn" onClick={onMissedRound}>
-              ミスだけもう1周（{roundMissedIds.length}語）
+              ミスだけもう1周（{roundMissedIds.length}
+              {u}）
             </button>
           )}
         </section>
@@ -56,16 +60,13 @@ export function Result({
 
       {misses.length > 0 && (
         <section className="card">
-          <h2>ミスした語</h2>
+          <h2>ミスした{what}</h2>
           <ul className="list">
             {misses.map((r) => (
               <li key={r.q.item.id}>
                 <button className="row" onClick={() => onOpen(r.q.item.id)}>
                   <span className="no">{noLabel(r.q.item)}</span>
-                  <span className="w" lang="en">
-                    {r.q.item.word}
-                  </span>
-                  <span className="j">{r.q.item.ja}</span>
+                  <RowText item={r.q.item} />
                 </button>
               </li>
             ))}
@@ -81,10 +82,7 @@ export function Result({
               <li key={r.q.item.id}>
                 <button className="row" onClick={() => onOpen(r.q.item.id)}>
                   <span className="no">{noLabel(r.q.item)}</span>
-                  <span className="w" lang="en">
-                    {r.q.item.word}
-                  </span>
-                  <span className="j">{r.q.item.ja}</span>
+                  <RowText item={r.q.item} />
                 </button>
               </li>
             ))}

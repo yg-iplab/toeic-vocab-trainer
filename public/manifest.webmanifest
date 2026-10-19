@@ -1,7 +1,7 @@
 {
-  "name": "TOEIC単語トレーナー",
-  "short_name": "単語トレ",
-  "description": "単語帳の周回・ミス記録・忘却曲線での復習（個人用・非公式）",
+  "name": "TOEIC単語・文法トレーナー",
+  "short_name": "TOEICトレ",
+  "description": "単語帳と文法問題（Part 5）の周回・ミス記録・忘却曲線での復習（個人用・非公式）",
   "lang": "ja",
   "start_url": "./",
   "scope": "./",

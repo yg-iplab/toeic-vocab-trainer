@@ -7,6 +7,8 @@ export default defineConfig({
   use: {
     ...devices["iPhone 13"],
     browserName: "chromium",
+    // Playwright 用のブラウザを入れられないときは、PW_CHANNEL=chrome で Mac の Google Chrome を使う
+    channel: process.env.PW_CHANNEL || undefined,
     baseURL: "http://localhost:4173/",
     locale: "ja-JP",
     timezoneId: "Asia/Tokyo",

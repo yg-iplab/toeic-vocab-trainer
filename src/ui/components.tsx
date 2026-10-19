@@ -1,7 +1,7 @@
 // 画面どうしで使い回す部品
 import type { ReactNode } from "react";
 import { noLabel } from "../data/stats";
-import type { CardState, Item, Status, UserNote } from "../types";
+import { LETTERS, type CardState, type ChapterInfo, type DeruItem, type Item, type KinfreItem, type Status, type UserNote } from "../types";
 
 export const STATUS_LABEL: Record<Status, string> = {
   new: "未学習",
@@ -39,7 +39,7 @@ export function ProgressBar({ value, max, label }: { value: number; max: number;
   );
 }
 
-export function WordHead({ item }: { item: Item }) {
+export function WordHead({ item }: { item: KinfreItem }) {
   return (
     <div className="word-head">
       <div className="word-meta">
@@ -58,7 +58,7 @@ export function WordHead({ item }: { item: Item }) {
 }
 
 /** 教材の訳・例文・補足と、自分のメモ */
-export function ItemInfo({ item, note, card }: { item: Item; note?: UserNote; card?: CardState }) {
+export function ItemInfo({ item, note, card }: { item: KinfreItem; note?: UserNote; card?: CardState }) {
   const example = item.example_en_blank || item.example_en;
   return (
     <div className="item-info">
@@ -83,6 +83,134 @@ export function ItemInfo({ item, note, card }: { item: Item; note?: UserNote; ca
         <p className="memo">
           <b>覚え方（DB）</b> {item.mnemonic_src}
         </p>
+      )}
+      {note?.mnemonic && (
+        <p className="memo mine">
+          <b>自分の覚え方</b> {note.mnemonic}
+        </p>
+      )}
+      {note?.wrong_note && (
+        <p className="memo mine">
+          <b>前のミス</b> {note.wrong_note}
+        </p>
+      )}
+      {card && card.miss_count > 0 && <p className="miss-count">これまでのミス：{card.miss_count}回</p>}
+    </div>
+  );
+}
+
+/** 一覧の1行の中身（単語は 語＋訳、文法は 分野＋問題文） */
+export function RowText({ item }: { item: Item }) {
+  if (item.deck === "deru1000") {
+    return (
+      <>
+        <span className="w">{item.section}</span>
+        <span className="j" lang="en">
+          {item.stem}
+        </span>
+      </>
+    );
+  }
+  return (
+    <>
+      <span className="w" lang="en">
+        {item.word}
+      </span>
+      <span className="j">{item.ja}</span>
+    </>
+  );
+}
+
+/** 問題文。空所（-------）を下線の枠で見せる */
+export function Stem({ text }: { text: string }) {
+  const parts = text.split(/-{3,}/);
+  return (
+    <p className="stem" lang="en">
+      {parts.map((p, i) => (
+        <span key={i}>
+          {p}
+          {i < parts.length - 1 && (
+            <span className="blank" aria-label="空所">
+              {"\u3000".repeat(4)}
+            </span>
+          )}
+        </span>
+      ))}
+    </p>
+  );
+}
+
+/** 文法の問題の上の部分（番号・分野・範囲・問題文） */
+export function Part5Head({ item, chapter }: { item: DeruItem; chapter?: ChapterInfo }) {
+  return (
+    <div className="p5-head">
+      <div className="word-meta">
+        <span className="no">{String(item.no).padStart(4, "0")}</span>
+        {item.section && <span className="pos">{item.section}</span>}
+        {item.quality && item.quality !== "ok" && <span className="pos warn-tag">要確認</span>}
+      </div>
+      <p className="p5-range">
+        {chapter?.label ?? item.chapter}・{item.block}
+      </p>
+      <Stem text={item.stem} />
+    </div>
+  );
+}
+
+/** 選択肢を (A) … の形で */
+export function choiceLabel(item: DeruItem, i: number): string {
+  return `(${LETTERS[i]}) ${item.choices[i] ?? ""}`;
+}
+
+/** 回答後に見せる中身（解説・全訳・語彙・章の解き方）。解説は × とあやふやのとき開いておく */
+export function Part5Info({
+  item,
+  chapter,
+  openExplanation,
+  note,
+  card,
+}: {
+  item: DeruItem;
+  chapter?: ChapterInfo;
+  openExplanation: boolean;
+  note?: UserNote;
+  card?: CardState;
+}) {
+  return (
+    <div className="item-info p5-info">
+      <p className="p5-answer">
+        正解 <b lang="en">{choiceLabel(item, LETTERS.indexOf(item.answer))}</b>
+      </p>
+      {item.explanation && (
+        <details className="notes" open={openExplanation}>
+          <summary>解説</summary>
+          <p className="pre">{item.explanation}</p>
+        </details>
+      )}
+      {item.translation && (
+        <details className="notes" open={openExplanation}>
+          <summary>全訳</summary>
+          <p className="pre">{item.translation}</p>
+        </details>
+      )}
+      {item.vocab && (
+        <details className="notes">
+          <summary>語彙</summary>
+          <p className="pre">{item.vocab}</p>
+        </details>
+      )}
+      {chapter && chapter.tips.length > 0 && (
+        <details className="notes">
+          <summary>この章の解き方</summary>
+          <dl className="tips">
+            {chapter.tips.map((t) => (
+              <div key={t.k}>
+                <dt>{t.k}</dt>
+                <dd>{t.v}</dd>
+              </div>
+            ))}
+          </dl>
+        </details>
       )}
       {note?.mnemonic && (
         <p className="memo mine">

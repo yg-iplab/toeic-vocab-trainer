@@ -808,3 +808,116 @@ code {
   color: var(--muted);
   font-size: 0.78rem;
 }
+
+/* 教材の切り替え（ホーム） */
+.deck-switch button {
+  min-height: 46px;
+  font-weight: 700;
+}
+
+/* 文法（Part 5） */
+.p5-head {
+  padding: 6px 0 2px;
+}
+
+.p5-head .word-meta {
+  justify-content: flex-start;
+}
+
+.p5-range {
+  color: var(--muted);
+  font-size: 0.8rem;
+  margin: 4px 0 6px;
+}
+
+.stem {
+  font-family: ui-serif, Georgia, serif;
+  font-size: 1.12rem;
+  line-height: 1.75;
+  margin: 0;
+  word-break: break-word;
+}
+
+.blank {
+  display: inline-block;
+  min-width: 4.5em;
+  border-bottom: 2px solid var(--accent);
+  margin: 0 3px;
+}
+
+.timer {
+  align-self: flex-end;
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.timer.over {
+  color: var(--ng);
+  font-weight: 700;
+}
+
+.p5-choices .choice {
+  font-family: ui-serif, Georgia, serif;
+  font-size: 1.05rem;
+}
+
+.p5-answer {
+  font-size: 1rem;
+  margin: 0 0 6px;
+}
+
+.p5-info {
+  color: var(--text); /* 正誤の枠の色（緑・赤）を、長い解説の文字には付けない */
+}
+
+.p5-info details {
+  margin: 4px 0;
+}
+
+.pre {
+  white-space: pre-line;
+}
+
+.tips {
+  margin: 4px 0;
+  font-size: 0.88rem;
+}
+
+.tips dt {
+  font-weight: 700;
+  color: var(--accent);
+  font-size: 0.8rem;
+}
+
+.tips dd {
+  margin: 0 0 6px;
+}
+
+.p5-choice-list {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0;
+  font-family: ui-serif, Georgia, serif;
+}
+
+.p5-choice-list li {
+  padding: 4px 8px;
+  border-radius: 8px;
+}
+
+.p5-choice-list li.correct {
+  background: var(--ok-soft);
+  color: var(--ok);
+  font-weight: 700;
+}
+
+.warn-tag {
+  background: var(--warn-soft);
+}
+
+.sub-h {
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin: 10px 0 4px;
+}

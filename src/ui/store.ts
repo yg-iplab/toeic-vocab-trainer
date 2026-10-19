@@ -3,13 +3,14 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { FSRS } from "ts-fsrs";
 import { db, getMeta, getSettings } from "../data/db";
 import { makeScheduler } from "../srs/scheduler";
-import type { CardState, Item, ReviewLog, Round, Settings, UserNote } from "../types";
+import type { CardState, ChapterInfo, Item, ReviewLog, Round, Settings, UserNote } from "../types";
 import { DEFAULT_SETTINGS } from "../types";
 
 export type StoreData = {
   loaded: boolean;
   items: Item[];
   itemsById: Map<string, Item>;
+  chapters: Map<string, ChapterInfo>; // 文法の章・模試セット
   cards: Map<string, CardState>;
   notes: Map<string, UserNote>;
   logs: ReviewLog[];
@@ -22,6 +23,7 @@ const EMPTY: StoreData = {
   loaded: false,
   items: [],
   itemsById: new Map(),
+  chapters: new Map(),
   cards: new Map(),
   notes: new Map(),
   logs: [],
@@ -35,8 +37,9 @@ export function useStore(): Store {
   const [data, setData] = useState<StoreData>(EMPTY);
 
   const reload = useCallback(async () => {
-    const [items, cards, notes, logs, rounds, settings, lastBackupAt] = await Promise.all([
+    const [items, chapters, cards, notes, logs, rounds, settings, lastBackupAt] = await Promise.all([
       db.items.orderBy("order").toArray(),
+      db.chapters.orderBy("key").toArray(),
       db.cards.toArray(),
       db.notes.toArray(),
       db.logs.orderBy("ts").toArray(),
@@ -48,6 +51,7 @@ export function useStore(): Store {
       loaded: true,
       items,
       itemsById: new Map(items.map((i) => [i.id, i])),
+      chapters: new Map(chapters.sort((a, b) => a.order - b.order).map((c) => [c.key, c])),
       cards: new Map(cards.map((c) => [c.id, c])),
       notes: new Map(notes.map((n) => [n.id, n])),
       logs,

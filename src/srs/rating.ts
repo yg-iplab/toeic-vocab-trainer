@@ -1,5 +1,5 @@
-// 4択の結果を FSRS の評価に変える
-// 金フレの運用ルール「3秒で出なければ見る」をそのまま使う（秒数は設定で変えられる）
+// 4択・Part 5 の結果を FSRS の評価に変える
+// 運用ルールをそのまま使う：単語は「3秒で出なければ見る」、文法は「1問20〜30秒」（秒数は設定で変えられる）
 import type { Rating } from "../types";
 
 export function ratingForChoice(correct: boolean, ms: number, unsure: boolean, hardMs: number): Rating {

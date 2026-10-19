@@ -1,9 +1,10 @@
 // 記録画面（ミス一覧・周回ごとの成績・範囲別の進み具合）
 import { useMemo, useState } from "react";
-import { groupStats, missedItems, noLabel, roundStats } from "../data/stats";
+import { roundDeck } from "../data/rounds";
+import { groupStats, itemsOfDeck, missedItems, noLabel, roundStats, unit } from "../data/stats";
 import { formatDateTime } from "../lib/date";
 import type { Item, Round } from "../types";
-import { ProgressBar, StatusBadge, TopBar } from "./components";
+import { ProgressBar, RowText, StatusBadge, TopBar } from "./components";
 import type { Store } from "./store";
 
 type Tab = "miss" | "round" | "range";
@@ -19,14 +20,24 @@ export function Records({
 }) {
   const [tab, setTab] = useState<Tab>("miss");
   const [query, setQuery] = useState("");
-  const missed = useMemo(() => missedItems(store.items, store.cards), [store.items, store.cards]);
-  const rounds = useMemo(() => roundStats(store.rounds, store.logs), [store.rounds, store.logs]);
-  const groups = useMemo(() => groupStats(store.items, store.cards), [store.items, store.cards]);
+  // 表示中の教材（ホームで切り替え）の分だけ出す
+  const deck = store.settings.deck;
+  const u = unit(deck);
+  const items = useMemo(() => itemsOfDeck(store.items, deck), [store.items, deck]);
+  const missed = useMemo(() => missedItems(items, store.cards), [items, store.cards]);
+  const rounds = useMemo(
+    () => roundStats(store.rounds.filter((r) => roundDeck(r) === deck), store.logs),
+    [store.rounds, store.logs, deck],
+  );
+  const groups = useMemo(() => groupStats(items, store.cards, store.chapters), [items, store.cards, store.chapters]);
 
   const q = query.trim().toLowerCase();
-  const searched: Item[] = q
-    ? store.items.filter((i) => i.word.toLowerCase().includes(q) || i.ja.includes(query.trim()) || noLabel(i) === q.padStart(3, "0") || String(i.no) === q)
-    : [];
+  const matches = (i: Item) => {
+    if (String(i.no) === q || noLabel(i) === q.padStart(noLabel(i).length, "0")) return true;
+    if (i.deck === "deru1000") return i.stem.toLowerCase().includes(q) || i.section.includes(query.trim()) || i.block.includes(query.trim());
+    return i.word.toLowerCase().includes(q) || i.ja.includes(query.trim());
+  };
+  const searched: Item[] = q ? items.filter(matches) : [];
 
   return (
     <div className="screen">
@@ -45,7 +56,13 @@ export function Records({
 
       {tab === "miss" && (
         <>
-          <input className="search" type="search" placeholder="単語・訳・番号で探す" value={query} onChange={(e) => setQuery(e.target.value)} />
+          <input
+            className="search"
+            type="search"
+            placeholder={deck === "deru1000" ? "番号・英文・分野で探す" : "単語・訳・番号で探す"}
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
           {q ? (
             <ul className="list">
               {searched.slice(0, 100).map((i) => {
@@ -54,10 +71,7 @@ export function Records({
                   <li key={i.id}>
                     <button className="row" onClick={() => onOpen(i.id)}>
                       <span className="no">{noLabel(i)}</span>
-                      <span className="w" lang="en">
-                        {i.word}
-                      </span>
-                      <span className="j">{i.ja}</span>
+                      <RowText item={i} />
                       <StatusBadge status={c?.status ?? "new"} />
                     </button>
                   </li>
@@ -69,16 +83,16 @@ export function Records({
             <p className="empty">まだミスはありません。</p>
           ) : (
             <>
-              <p className="sub">ミスした語 {missed.length}語（ミス回数の多い順）</p>
+              <p className="sub">
+                ミスした{deck === "deru1000" ? "問題" : "語"} {missed.length}
+                {u}（ミス回数の多い順）
+              </p>
               <ul className="list">
                 {missed.map(({ item, card }) => (
                   <li key={item.id}>
                     <button className="row" onClick={() => onOpen(item.id)}>
                       <span className="no">{noLabel(item)}</span>
-                      <span className="w" lang="en">
-                        {item.word}
-                      </span>
-                      <span className="j">{item.ja}</span>
+                      <RowText item={item} />
                       <span className="miss">×{card.miss_count}</span>
                       <StatusBadge status={card.status} />
                     </button>
@@ -101,7 +115,9 @@ export function Records({
                 <h2>{s.round.label}</h2>
                 <ProgressBar value={s.round.cursor} max={s.round.itemIds.length} />
                 <p className="sub">
-                  {s.answered}/{s.round.itemIds.length}語・正答率 {rate}%・ミス {s.missedIds.length}語
+                  {s.answered}/{s.round.itemIds.length}
+                  {u}・正答率 {rate}%・ミス {s.missedIds.length}
+                  {u}
                   <br />
                   開始 {formatDateTime(s.round.startedAt)}
                   {s.round.finishedAt !== undefined && `・終了 ${formatDateTime(s.round.finishedAt)}`}

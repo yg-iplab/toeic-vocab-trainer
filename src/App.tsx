@@ -2,8 +2,8 @@
 import { useEffect, useState } from "react";
 import { db } from "./data/db";
 import { ensurePersisted, isStandalone } from "./data/persist";
-import { startMissedRound, startRound } from "./data/rounds";
-import { newIntroducedOn, roundStats } from "./data/stats";
+import { pickActiveRound, pickNextRoundNo, roundDeck, startMissedRound, startRound } from "./data/rounds";
+import { logsOfDeck, newIntroducedOn, roundStats } from "./data/stats";
 import { localDay } from "./lib/date";
 import { buildDailySet, buildRoundSet, poolOf, type RoundScope } from "./srs/session";
 import type { Round } from "./types";
@@ -35,10 +35,10 @@ export default function App() {
     void ensurePersisted();
   }, []);
 
-  const activeRound = store.rounds
-    .filter((r) => r.finishedAt === undefined)
-    .sort((a, b) => (b.rid ?? 0) - (a.rid ?? 0))[0];
-  const nextNo = store.rounds.filter((r) => r.parentRid === undefined).reduce((m, r) => Math.max(m, r.no), 0) + 1;
+  // 進行中の周回と「何周目」は、表示中の教材ごと
+  const deck = store.settings.deck;
+  const activeRound = pickActiveRound(store.rounds, deck);
+  const nextNo = pickNextRoundNo(store.rounds, deck);
 
   const begin = (session: Session) => {
     if (session.questions.length === 0) {
@@ -58,19 +58,20 @@ export default function App() {
       now,
       rng: Math.random,
       scheduler: store.scheduler,
-      newIntroducedToday: newIntroducedOn(store.logs, localDay(now)),
+      newIntroducedToday: newIntroducedOn(logsOfDeck(store.logs, deck), localDay(now)),
     });
-    begin({ mode: "daily", label: "今日の学習", questions });
+    begin({ deck, mode: "daily", label: "今日の学習", questions });
   };
 
   const continueRound = async (r: Round) => {
     const fresh = (await db.rounds.get(r.rid!)) ?? r;
-    const questions = buildRoundSet(fresh, store.itemsById, poolOf(store.items, store.settings), store.settings, Math.random);
-    begin({ mode: "round", label: fresh.label, questions, rid: fresh.rid, roundNo: fresh.no });
+    const rDeck = roundDeck(fresh);
+    const questions = buildRoundSet(fresh, store.itemsById, poolOf(store.items, store.settings, rDeck), store.settings, Math.random);
+    begin({ deck: rDeck, mode: "round", label: fresh.label, questions, rid: fresh.rid, roundNo: fresh.no });
   };
 
   const newRound = async (scope: RoundScope, label: string, order: Round["order"]) => {
-    const r = await startRound(store.items, scope, label, order, Math.random, Date.now());
+    const r = await startRound(store.items, scope, label, order, Math.random, Date.now(), deck);
     await store.reload();
     await continueRound(r);
   };
