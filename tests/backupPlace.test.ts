@@ -21,7 +21,7 @@ describe("バックアップの保存先", () => {
     expect(DEFAULT_SETTINGS.backupPlace).toBe(DEFAULT_BACKUP_PLACE);
     expect(DEFAULT_BACKUP_PLACE).toContain("iCloud Drive");
     await setMeta("settings", { setSize: 15, speechRate: 0.8 }); // v0.4 までの設定
-    expect(await getSettings()).toMatchObject({ setSize: 15, speechRate: 0.8, backupPlace: DEFAULT_BACKUP_PLACE });
+    expect(await getSettings()).toMatchObject({ setSize: 15, speechRate: 0.8, backupPlace: DEFAULT_BACKUP_PLACE, kinfreAlwaysExplain: true });
   });
 
   it("変えた保存先は残り、バックアップの設定にも入る（教材の文は入らない）", async () => {

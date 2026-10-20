@@ -296,8 +296,10 @@ test("版2の DB（Phase 2 の記録）を新しい版で開いても、記録�
         };
       }),
   );
-  expect(after.version).toBe(30);
+  expect(after.version).toBe(40); // 版2 → 版4（Dexie の版×10）。版3の解き方・版4の公式音声の表が足される
   expect(after.stores).toContain("tips");
+  expect(after.stores).toContain("audio");
+  expect(after.stores).toContain("audioSegs");
   expect(after.logs).toBe(3);
   expect(after.cards).toBe(3);
 });

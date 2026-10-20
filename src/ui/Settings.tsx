@@ -13,6 +13,7 @@ import {
   restoreBackup,
   saveTextFile,
 } from "../data/backup";
+import { audioSummary, deleteAudio, formatBytes, importAudioFiles, type AudioSummary } from "../data/audio";
 import { db, saveSettings, upsertItems, upsertTips } from "../data/db";
 import { mergeChapters } from "../data/parseDeru";
 import { parseMaterialFile } from "../data/parseFile";
@@ -75,12 +76,18 @@ export function Settings({ store }: { store: Store }) {
   const [persist, setPersist] = useState<PersistState | null>(null);
   const s = store.settings;
   const [placeDraft, setPlaceDraft] = useState(s.backupPlace);
+  const [audioSum, setAudioSum] = useState<AudioSummary | null>(null);
+  const [audioBusy, setAudioBusy] = useState<string | null>(null);
 
   useEffect(() => {
     void ensurePersisted().then(setPersist);
   }, []);
 
   useEffect(() => setPlaceDraft(s.backupPlace), [s.backupPlace]);
+
+  useEffect(() => {
+    void audioSummary().then(setAudioSum);
+  }, [store.audioKeys]);
 
   const update = async (patch: Partial<SettingsT>) => {
     await saveSettings({ ...s, ...patch });
@@ -143,6 +150,41 @@ export function Settings({ store }: { store: Store }) {
     } catch (e) {
       setMsg((e as Error).message);
     }
+  };
+
+  const importAudio = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    // 単語は、端末にある本編の語の track だけ入れる（使わない track で容量を使わない）
+    const wantTracks = new Set(store.items.flatMap((i) => (i.deck === "kinfre" && i.part === "main" && i.track !== undefined ? [i.track] : [])));
+    setAudioBusy("読み込み中…");
+    try {
+      const r = await importAudioFiles(Array.from(files), {
+        wantTracks,
+        now: Date.now(),
+        onProgress: (done, total) => setAudioBusy(`読み込み中… ${done} / ${total}`),
+      });
+      await store.reload();
+      const parts: string[] = [];
+      if (r.added.kinfre) parts.push(`単語の音声 ${r.added.kinfre}本`);
+      if (r.added.deru1000) parts.push(`文法の音声 ${r.added.deru1000}問`);
+      if (r.bytes) parts.push(`（${formatBytes(r.bytes)}）`);
+      if (r.segs) parts.push(`時間の表 ${r.segs}語`);
+      const sum = await audioSummary();
+      const needIndex = sum.kinfre.files > 0 && sum.segs === 0 ? "単語は、時間の表（kinfre_audio_index.json）も選ぶと鳴らせます。" : "";
+      setMsg(parts.length ? `${parts.join("・")}を読み込みました。${needIndex}` : "読み込める音声がありませんでした。");
+      setSkipped(r.skipped);
+    } catch (e) {
+      setMsg((e as Error).message);
+    } finally {
+      setAudioBusy(null);
+    }
+  };
+
+  const removeAudio = async (deck: "kinfre" | "deru1000") => {
+    if (!confirm(`${deck === "kinfre" ? "単語" : "文法"}の公式音声をこの端末から消します（学習記録は消えません）。よろしいですか？`)) return;
+    await deleteAudio(deck);
+    await store.reload();
+    setMsg(`${deck === "kinfre" ? "単語" : "文法"}の公式音声を消しました。`);
   };
 
   const backup = async () => {
@@ -254,6 +296,36 @@ export function Settings({ store }: { store: Store }) {
       </section>
 
       <section className="card">
+        <h2>公式音声</h2>
+        <p>
+          {audioSum
+            ? `単語 ${audioSum.kinfre.files}本（${formatBytes(audioSum.kinfre.bytes)}・時間の表 ${audioSum.segs}語）／文法 ${audioSum.deru1000.files}問（${formatBytes(audioSum.deru1000.bytes)}）`
+            : "確認中…"}
+        </p>
+        <p className="sub">
+          Drive の <code>試験勉強資料/TOEIC/audio/</code> の ZIP（単語は「英語のみ」）と、時間の表 <code>kinfre_audio_index.json</code> をまとめて選びます。ZIP は解凍しなくてよい。音声はこの端末の中だけに置き、バックアップには入れません。音声がある語・問題は 🔊 が「（公式）」、無ければ端末の読み上げ「（合成）」で鳴ります。
+        </p>
+        <label className={`btn file ${audioBusy ? "disabled" : ""}`}>
+          {audioBusy ?? "音声を読み込む"}
+          <input type="file" multiple disabled={!!audioBusy} onChange={(e) => (importAudio(e.target.files), (e.target.value = ""))} />
+        </label>
+        {audioSum && (audioSum.kinfre.files > 0 || audioSum.deru1000.files > 0) && (
+          <div className="btn-row">
+            {audioSum.kinfre.files > 0 && (
+              <button className="btn ghost" onClick={() => removeAudio("kinfre")}>
+                単語の音声を消す
+              </button>
+            )}
+            {audioSum.deru1000.files > 0 && (
+              <button className="btn ghost" onClick={() => removeAudio("deru1000")}>
+                文法の音声を消す
+              </button>
+            )}
+          </div>
+        )}
+      </section>
+
+      <section className="card">
         <h2>Drive の学習メモへ</h2>
         <p className="sub">ミス一覧.md は学習メモや NotebookLM に貼れる形です。「学習メモ用」は 出る1000_学習メモ の書き方（## 番号・status・wrong・mnemonic・note）そのままです。entries.jsonl は AI_OS の overlay と同じ形です。</p>
         <h3 className="sub-h">単語</h3>
@@ -296,6 +368,10 @@ export function Settings({ store }: { store: Store }) {
           format={(n) => `${n}語`}
           onChange={(n) => update({ newPerDay: n })}
         />
+        <label className="check">
+          <input type="checkbox" checked={s.kinfreAlwaysExplain} onChange={(e) => update({ kinfreAlwaysExplain: e.target.checked })} />
+          4択の回答後、訳・例文・右欄の補足をいつも見る（迷わず正解でも。自動で次へは進まない）
+        </label>
         <label className="check">
           <input type="checkbox" checked={s.includeSupplement} onChange={(e) => update({ includeSupplement: e.target.checked })} />
           今日の学習に Supplement も入れる
@@ -353,7 +429,7 @@ export function Settings({ store }: { store: Store }) {
         </label>
         <label className="check">
           <input type="checkbox" checked={s.autoNext} onChange={(e) => update({ autoNext: e.target.checked })} />
-          迷わず正解したら自動で次へ
+          迷わず正解したら自動で次へ（単語・文法の「いつも見る／いつも開く」を切ったとき）
         </label>
         <Choice
           label="発音ボタンの読み上げの速さ"
@@ -362,9 +438,9 @@ export function Settings({ store }: { store: Store }) {
           format={(n) => (n === 1 ? "ふつう" : `${Math.round(n * 100)}%`)}
           onChange={(n) => update({ speechRate: n })}
         />
-        <p className="sub">🔊 のボタンは端末の読み上げ機能（合成音声）で読みます。公式の音声ではありません。iPhone で鳴らないときは、マナーモード（消音）を切ってください。</p>
+        <p className="sub">🔊 のボタンは、公式音声を読み込んだ語・問題では公式音声（「公式」）、それ以外は端末の読み上げ機能（「合成」）で鳴ります。速さはどちらにも効きます。iPhone で鳴らないときは、マナーモード（消音）を切ってください。</p>
       </section>
-      <p className="footer-note">TOEIC単語・文法トレーナー v0.5（個人用の非公式ツール）・教材データはこの端末の中だけにあります</p>
+      <p className="footer-note">TOEIC単語・文法トレーナー v0.6（個人用の非公式ツール）・教材データはこの端末の中だけにあります</p>
     </div>
   );
 }

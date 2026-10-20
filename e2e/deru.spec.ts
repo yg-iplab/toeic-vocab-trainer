@@ -104,6 +104,7 @@ test("文法：読み込み → 章の周回 → ミス・あやふや → 再�
   await page.getByRole("button", { name: /1周目を始める（30語）/ }).click();
   for (let i = 1; i <= 3; i++) {
     await page.locator(".choice", { hasText: new RegExp(`^意味${i}$`) }).click();
+    await page.getByRole("button", { name: "次へ" }).click(); // 既定では正解しても回答後の画面で止まる
     await expect(page.locator(".study-count")).toHaveText(`${i + 1} / 10`, { timeout: 3000 });
   }
   await page.getByRole("button", { name: "✕ やめる" }).click();

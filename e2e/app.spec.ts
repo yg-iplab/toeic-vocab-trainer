@@ -44,9 +44,13 @@ async function answer(page: Page, wrongNos: Set<number>) {
     await expect(page.getByText("× 不正解")).toBeVisible();
     await expect(page.locator(".confused")).toContainText("の意味");
     await page.getByRole("button", { name: "次へ" }).click();
+    await expect(page.locator(".feedback")).toBeHidden(); // 次の問題か結果の画面に変わるまで待つ
   } else {
     await correct.click();
-    await expect(page.locator(".feedback")).toBeVisible();
+    await expect(page.getByText("○ 正解")).toBeVisible();
+    // 既定では、迷わず正解しても回答後の画面（訳・例文・補足）で止まる
+    await page.getByRole("button", { name: "次へ" }).click();
+    await expect(page.locator(".feedback")).toBeHidden();
   }
   return { n, wantWrong };
 }
@@ -74,7 +78,6 @@ test("読み込み → 周回 → ミス → 再起動しても記録が残る �
     if (await page.locator(".score").isVisible()) break;
     const { wantWrong } = await answer(page, wrong);
     if (wantWrong && !shotFeedback) shotFeedback = true;
-    if (!wantWrong) await page.waitForTimeout(900); // 自動で次へ
   }
   await expect(page.locator(".score-num")).toContainText("8");
   await expect(page.locator(".score-num")).toContainText("/ 10 正解");

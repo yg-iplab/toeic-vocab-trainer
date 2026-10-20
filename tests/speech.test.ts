@@ -60,6 +60,7 @@ describe("発音ボタン", () => {
 
   it("文法の解説は既定で毎回開く・読み上げは少しゆっくり", () => {
     expect(DEFAULT_SETTINGS.deruAlwaysExplain).toBe(true);
+    expect(DEFAULT_SETTINGS.kinfreAlwaysExplain).toBe(true); // 単語の4択も、迷わず正解で自動で次へ進まない
     expect(DEFAULT_SETTINGS.speechRate).toBe(0.9);
   });
 });

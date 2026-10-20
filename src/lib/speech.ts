@@ -1,5 +1,7 @@
 // 発音の確認：端末の読み上げ機能（Web Speech API の合成音声）で英文を読む
 // 公式の音声ではない。端末に入っている英語の声を使うので、電波が無くても動く（iPhone は Siri の声）
+// 公式音声（audioPlayer）と同時には鳴らさない
+import { stopClip } from "./audioPlayer";
 
 export function canSpeak(): boolean {
   return typeof window !== "undefined" && "speechSynthesis" in window && typeof SpeechSynthesisUtterance !== "undefined";
@@ -18,6 +20,7 @@ function englishVoice(): SpeechSynthesisVoice | undefined {
 /** 読み上げる（前の読み上げは止める）。読めないときは false */
 export function speak(text: string, rate = 1): boolean {
   if (!canSpeak() || !text.trim()) return false;
+  stopClip();
   const synth = window.speechSynthesis;
   synth.cancel();
   const u = new SpeechSynthesisUtterance(text);
@@ -29,7 +32,9 @@ export function speak(text: string, rate = 1): boolean {
   return true;
 }
 
+/** 合成音声も公式音声も止める */
 export function stopSpeaking() {
+  stopClip();
   if (canSpeak()) window.speechSynthesis.cancel();
 }
 

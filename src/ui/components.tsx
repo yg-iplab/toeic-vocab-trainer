@@ -1,8 +1,11 @@
 // 画面どうしで使い回す部品
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import type { ClipRef, ItemClips } from "../data/audio";
+import { db } from "../data/db";
 import { noLabel } from "../data/stats";
 import { tipsButtonLabel, type TipsRef } from "../data/tips";
 import { exampleMissesWord, exampleText, vocabFromExplanation } from "../lib/itemText";
+import { clipUrl, playClip, readyUrl } from "../lib/audioPlayer";
 import { canSpeak, filledSentence, speak } from "../lib/speech";
 import { LETTERS, type CardState, type ChapterInfo, type DeruItem, type Item, type KinfreItem, type Status, type UserNote } from "../types";
 
@@ -60,12 +63,53 @@ export function WordHead({ item }: { item: KinfreItem }) {
   );
 }
 
-/** 発音を聞くボタン（端末の読み上げ機能。読めない端末では出さない） */
-export function SpeakButton({ text, label, rate }: { text: string; label: string; rate?: number }) {
+const loadAudio = async (key: string) => (await db.audio.get(key))?.blob;
+
+/** 公式音声の URL を、画面を出したときに用意しておく（押した直後に鳴らせるように） */
+function useClipUrl(key?: string): string | undefined {
+  const [url, setUrl] = useState(() => (key ? readyUrl(key) : undefined));
+  useEffect(() => {
+    if (!key) {
+      setUrl(undefined);
+      return;
+    }
+    let alive = true;
+    void clipUrl(key, loadAudio).then((u) => alive && setUrl(u));
+    return () => {
+      alive = false;
+    };
+  }, [key]);
+  return url;
+}
+
+function stopSynth() {
+  if (canSpeak()) window.speechSynthesis.cancel();
+}
+
+/**
+ * 発音を聞くボタン。公式音声が端末にあればそれを（「公式」）、無ければ端末の読み上げ機能（「合成」）で鳴らす
+ * どちらも無い端末では出さない
+ */
+export function SpeakButton({ text, label, rate, clip }: { text: string; label: string; rate?: number; clip?: ClipRef }) {
+  const url = useClipUrl(clip?.key);
+  if (clip) {
+    const play = async () => {
+      const u = url ?? (await clipUrl(clip.key, loadAudio));
+      if (u) playClip(u, clip.range, rate ?? 1, stopSynth);
+      else speak(text, rate);
+    };
+    return (
+      <button type="button" className="speak-btn official" onClick={play}>
+        🔊 {label}
+        <small>（公式）</small>
+      </button>
+    );
+  }
   if (!canSpeak() || !text.trim()) return null;
   return (
     <button type="button" className="speak-btn" onClick={() => speak(text, rate)}>
       🔊 {label}
+      <small>（合成）</small>
     </button>
   );
 }
@@ -85,14 +129,26 @@ export function BackupPlaceHint({ place }: { place: string }) {
 }
 
 /** 教材の訳・例文・補足と、自分のメモ */
-export function ItemInfo({ item, note, card, speechRate }: { item: KinfreItem; note?: UserNote; card?: CardState; speechRate?: number }) {
+export function ItemInfo({
+  item,
+  note,
+  card,
+  speechRate,
+  clips = {},
+}: {
+  item: KinfreItem;
+  note?: UserNote;
+  card?: CardState;
+  speechRate?: number;
+  clips?: ItemClips;
+}) {
   const example = exampleText(item);
   return (
     <div className="item-info">
       <p className="ja">{item.ja}</p>
       <div className="speak-row">
-        <SpeakButton text={item.word} label="単語" rate={speechRate} />
-        {example && <SpeakButton text={example} label="例文" rate={speechRate} />}
+        <SpeakButton text={item.word} label="単語" rate={speechRate} clip={clips.word} />
+        {(example || clips.example) && <SpeakButton text={example ?? ""} label="例文" rate={speechRate} clip={clips.example} />}
       </div>
       {(example || item.example_ja) && (
         <div className="example">
@@ -101,7 +157,12 @@ export function ItemInfo({ item, note, card, speechRate }: { item: KinfreItem; n
               {example}
             </p>
           )}
-          {example && exampleMissesWord(item) && <p className="example-warn">⚠ この例文は見出し語が読み取れていません（教材データの読み取り漏れ。公式音声から補う予定）</p>}
+          {example && exampleMissesWord(item) && (
+            <p className="example-warn">
+              ⚠ この例文は見出し語が読み取れていません（教材データの読み取り漏れ）{clips.example ? "。🔊 例文（公式）で全文を聞けます" : ""}
+            </p>
+          )}
+          {example && item.example_fixed && <p className="example-warn">🎧 抜けていた語を公式音声の聞き取りで補った例文です</p>}
           {item.example_ja && <p className="example-ja">{item.example_ja}</p>}
         </div>
       )}
@@ -231,6 +292,7 @@ export function Part5Info({
   tips,
   onOpenTips,
   speechRate,
+  clips = {},
 }: {
   item: DeruItem;
   chapter?: ChapterInfo;
@@ -240,6 +302,7 @@ export function Part5Info({
   tips?: TipsRef; // 解き方の全文（読み込んであれば）
   onOpenTips?: () => void;
   speechRate?: number;
+  clips?: ItemClips;
 }) {
   const answerText = item.choices[LETTERS.indexOf(item.answer)] ?? "";
   return (
@@ -248,7 +311,7 @@ export function Part5Info({
         正解 <b lang="en">{choiceLabel(item, LETTERS.indexOf(item.answer))}</b>
       </p>
       <div className="speak-row">
-        <SpeakButton text={filledSentence(item.stem, answerText)} label="正解の文を聞く" rate={speechRate} />
+        <SpeakButton text={filledSentence(item.stem, answerText)} label="正解の文を聞く" rate={speechRate} clip={clips.sentence} />
         <SpeakButton text={answerText} label="正解の語句" rate={speechRate} />
       </div>
       {item.explanation && (

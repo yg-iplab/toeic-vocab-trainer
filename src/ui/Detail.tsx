@@ -1,5 +1,6 @@
 // 1問・1語の詳細（教材の訳や解説・自分のメモ・回答履歴）
 import { useState } from "react";
+import { clipsFor } from "../data/audio";
 import { db } from "../data/db";
 import { tipsForItem } from "../data/tips";
 import { formatDateTime } from "../lib/date";
@@ -32,6 +33,7 @@ export function Detail({ store, id, onBack }: { store: Store; id: string; onBack
   const logs = store.logs.filter((l) => l.id === id).sort((a, b) => b.ts - a.ts);
   const chapter = item.deck === "deru1000" ? store.chapters.get(item.chapter) : undefined;
   const tipsRef = item.deck === "deru1000" ? tipsForItem(item, store.tips, store.chapterOfSection) : undefined;
+  const clips = clipsFor(item, store.audioKeys, store.audioSegs);
 
   const save = async () => {
     const extraField = item.deck === "deru1000" ? { custom_note: extra.trim() } : { custom_example: extra.trim() };
@@ -74,6 +76,7 @@ export function Detail({ store, id, onBack }: { store: Store; id: string; onBack
             tips={tipsRef}
             onOpenTips={() => setTipsOpen(true)}
             speechRate={store.settings.speechRate}
+            clips={clips}
           />
         </section>
       ) : (
@@ -83,7 +86,7 @@ export function Detail({ store, id, onBack }: { store: Store; id: string; onBack
             {item.section}
             {item.track !== undefined && ` / track ${item.track}`}
           </p>
-          <ItemInfo item={item} speechRate={store.settings.speechRate} />
+          <ItemInfo item={item} speechRate={store.settings.speechRate} clips={clips} />
         </section>
       )}
 

@@ -1,4 +1,5 @@
 // テスト用の共通部品（教材本文は使わず、架空のデータだけで作る）
+import { crc32, deflateRawSync } from "node:zlib";
 import type { DeruItem, KinfreItem } from "../src/types";
 
 export function fakeItem(no: number, over: Partial<KinfreItem> = {}): KinfreItem {
@@ -91,4 +92,58 @@ export function fakeDeruChapterMd(opts: { heading: string; from: number; to: num
   const text = lines.join("\n");
   // Drive の表示で付くことがあるエスケープ（\# \- \_）を再現する
   return opts.escape ? text.replace(/^#+/gm, (m) => m.replace(/#/g, "\\#")).replace(/^- /gm, "\\- ").replace(/_/g, "\\_") : text;
+}
+
+/** テスト用の ZIP を作る（中身は架空のバイト列だけ）。deflate＝true なら圧縮して入れる */
+export function makeZip(files: { name: string; data: Uint8Array<ArrayBuffer>; deflate?: boolean }[]): Uint8Array<ArrayBuffer> {
+  const enc = new TextEncoder();
+  const locals: Uint8Array[] = [];
+  const centrals: Uint8Array[] = [];
+  let offset = 0;
+  for (const f of files) {
+    const name = enc.encode(f.name);
+    const body = f.deflate ? new Uint8Array(deflateRawSync(f.data)) : f.data;
+    const crc = crc32(f.data);
+    const local = new DataView(new ArrayBuffer(30));
+    local.setUint32(0, 0x04034b50, true);
+    local.setUint16(4, 20, true);
+    local.setUint16(8, f.deflate ? 8 : 0, true);
+    local.setUint32(14, crc, true);
+    local.setUint32(18, body.length, true);
+    local.setUint32(22, f.data.length, true);
+    local.setUint16(26, name.length, true);
+    const cd = new DataView(new ArrayBuffer(46));
+    cd.setUint32(0, 0x02014b50, true);
+    cd.setUint16(4, 20, true);
+    cd.setUint16(6, 20, true);
+    cd.setUint16(10, f.deflate ? 8 : 0, true);
+    cd.setUint32(16, crc, true);
+    cd.setUint32(20, body.length, true);
+    cd.setUint32(24, f.data.length, true);
+    cd.setUint16(28, name.length, true);
+    cd.setUint32(42, offset, true);
+    locals.push(new Uint8Array(local.buffer), name, body);
+    centrals.push(new Uint8Array(cd.buffer), name);
+    offset += 30 + name.length + body.length;
+  }
+  const cdSize = centrals.reduce((n, a) => n + a.length, 0);
+  const end = new DataView(new ArrayBuffer(22));
+  end.setUint32(0, 0x06054b50, true);
+  end.setUint16(8, files.length, true);
+  end.setUint16(10, files.length, true);
+  end.setUint32(12, cdSize, true);
+  end.setUint32(16, offset, true);
+  const parts = [...locals, ...centrals, new Uint8Array(end.buffer)];
+  const out = new Uint8Array(parts.reduce((n, a) => n + a.length, 0));
+  let p = 0;
+  for (const a of parts) {
+    out.set(a, p);
+    p += a.length;
+  }
+  return out;
+}
+
+/** 架空の「音声」（中身は無音を表す 0 のバイト列。再生はしない） */
+export function silentBytes(n: number): Uint8Array<ArrayBuffer> {
+  return new Uint8Array(n);
 }

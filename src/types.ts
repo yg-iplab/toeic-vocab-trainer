@@ -32,6 +32,7 @@ export type KinfreItem = ItemBase & {
   example_ja?: string;
   example_en_blank?: string;
   notes_right?: string;
+  example_fixed?: string; // 抜けていた語を補った例文の印（章ファイルの「例文補完」。補い方の説明）
   appear_parts?: string[];
   mnemonic_src?: string; // 章ファイルに既に書かれていた覚え方
   wrong_note_src?: string; // 章ファイルに既に書かれていたミス
@@ -71,6 +72,28 @@ export type TipsDoc = {
   md: string; // ファイルの中身（Markdown）
   fileName: string;
   importedAt: number;
+};
+
+/**
+ * 公式音声の1本（端末の中だけに置く。教材なのでバックアップには入れない）
+ * 単語は track ごとに1本（key "kinfre-en-01"）を、時間の表（AudioSeg）で区切って鳴らす。文法は1問1本（key "deru1000-0001"）
+ */
+export type AudioRow = {
+  key: string;
+  deck: Deck;
+  track?: number;
+  blob: Blob;
+  size: number; // バイト数（一覧で容量を出すため）
+  name: string; // 元のファイル名
+  importedAt: number;
+};
+
+/** 単語の音声の「何秒〜何秒」（Mac で作る時間の表 kinfre_audio_index.json から）。秒の数字だけで、教材の文は持たない */
+export type AudioSeg = {
+  id: string; // "kinfre-0001"
+  key: string; // AudioRow.key
+  word?: [number, number];
+  example?: [number, number];
 };
 
 /** FSRS のカード（保存用に日付を数値にしたもの） */
@@ -157,6 +180,7 @@ export type Settings = {
   newPerDay: number;
   format: KinfreFormat;
   includeSupplement: boolean;
+  kinfreAlwaysExplain: boolean; // 4択の回答後、迷わず正解でも訳・例文・右欄の補足を開いたままにする（自動で次へは進まない）
   // 文法（Part 5）
   deruSetSize: number;
   deruHardMs: number;
@@ -181,6 +205,7 @@ export const DEFAULT_SETTINGS: Settings = {
   newPerDay: 20,
   format: "mc",
   includeSupplement: false,
+  kinfreAlwaysExplain: true,
   deruSetSize: 10,
   deruHardMs: 30000, // 本の目安は1問20〜30秒
   deruNewPerDay: 20,

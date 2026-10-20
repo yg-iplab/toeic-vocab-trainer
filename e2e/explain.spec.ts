@@ -112,3 +112,39 @@ test("文法の解説を毎回開く（設定で切り替え）・発音ボタ�
   await page.getByRole("button", { name: "🔊 例文" }).click();
   expect((await spoken(page)).slice(-2).map((x) => x.text)).toEqual(["word1", "The fictional word1 example."]);
 });
+
+test("単語：迷わず正解しても回答後の画面で止まる（設定で切ると自動で次へ）", async ({ page }) => {
+  page.on("dialog", (d) => d.accept());
+  await page.goto("./");
+  await page.getByRole("button", { name: "設定", exact: true }).click();
+  await page
+    .locator("label", { hasText: "教材データを読み込む" })
+    .locator("input[type=file]")
+    .setInputFiles({ name: "01_test_track01.md", mimeType: "text/markdown", buffer: Buffer.from(wordsMd(), "utf-8") });
+  await expect(page.getByText("8語を読み込みました")).toBeVisible();
+  await expect(page.getByRole("checkbox", { name: /訳・例文・右欄の補足をいつも見る/ })).toBeChecked();
+
+  await page.getByRole("button", { name: "ホーム", exact: true }).click();
+  await page.getByRole("button", { name: "周回を始める" }).click();
+  await page.getByRole("button", { name: /1周目を始める（8語）/ }).click();
+  await page.locator(".choice", { hasText: /^意味1$/ }).click();
+  await expect(page.getByText("○ 正解")).toBeVisible();
+  await expect(page.locator(".example-en")).toHaveText("The fictional word1 example.");
+  await page.waitForTimeout(1200);
+  await expect(page.locator(".study-count")).toHaveText("1 / 8"); // 自動で次へ進まない
+  await page.screenshot({ path: "test-results/explain_02_word_correct.png", fullPage: true });
+  await page.getByRole("button", { name: "次へ" }).click();
+  await expect(page.locator(".word")).toHaveText("word2");
+
+  // 設定で切ると、迷わず正解なら自動で次へ（v0.4 までと同じ）
+  await page.getByRole("button", { name: "✕ やめる" }).click();
+  await page.getByRole("button", { name: "ホームへ" }).click();
+  await page.getByRole("button", { name: "設定", exact: true }).click();
+  await page.getByRole("checkbox", { name: /訳・例文・右欄の補足をいつも見る/ }).click();
+  await expect(page.getByRole("checkbox", { name: /訳・例文・右欄の補足をいつも見る/ })).not.toBeChecked();
+  await page.getByRole("button", { name: "ホーム", exact: true }).click();
+  await page.getByRole("button", { name: /続きから/ }).click();
+  await expect(page.locator(".word")).toHaveText("word2");
+  await page.locator(".choice", { hasText: /^意味2$/ }).click();
+  await expect(page.locator(".word")).toHaveText("word3", { timeout: 3000 });
+});

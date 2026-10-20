@@ -1,5 +1,6 @@
 // 学習画面（単語：4択 / めくる、文法：Part 5）
 import { useEffect, useMemo, useRef, useState } from "react";
+import { clipsFor } from "../data/audio";
 import { recordAnswer } from "../data/record";
 import { tipsForItem } from "../data/tips";
 import { formatInterval } from "../lib/date";
@@ -69,8 +70,9 @@ export function Study({
   const q = queue[index];
   const format: Format = q?.item.deck === "deru1000" ? "part5" : q?.choices ? "mc" : "flip";
   const hardMs = deckSettings(settings, session.deck).hardMs;
-  // 文法は設定しだいで、毎回解説を開いておく（そのときは自動で次へ進めない）
-  const alwaysExplain = q?.item.deck === "deru1000" && settings.deruAlwaysExplain;
+  // 回答後の画面を毎回見せるか（そのときは自動で次へ進めない）。文法は解説、単語の4択は訳・例文・右欄の補足。
+  // めくるモードは答えを見てから自己採点するので対象外
+  const alwaysExplain = q?.item.deck === "deru1000" ? settings.deruAlwaysExplain : format === "mc" && settings.kinfreAlwaysExplain;
 
   useEffect(() => {
     setStartedAt(performance.now());
@@ -175,6 +177,7 @@ export function Study({
   const item = q.item;
   const chapter = item.deck === "deru1000" ? store.chapters.get(item.chapter) : undefined;
   const tipsRef = item.deck === "deru1000" ? tipsForItem(item, store.tips, store.chapterOfSection) : undefined;
+  const clips = clipsFor(item, store.audioKeys, store.audioSegs);
   const openTips = () => {
     tipsSeen.current = true;
     setTipsOpen(true);
@@ -248,7 +251,7 @@ export function Study({
 
       {format === "flip" && revealed && previews && item.deck === "kinfre" && (
         <>
-          <ItemInfo item={item} note={note} card={card} speechRate={settings.speechRate} />
+          <ItemInfo item={item} note={note} card={card} speechRate={settings.speechRate} clips={clips} />
           <div className="rate-grid">
             {([1, 2, 3, 4] as Rating[]).map((r) => (
               <button key={r} className={`rate rate-${r}`} onClick={() => rate(r)}>
@@ -289,9 +292,10 @@ export function Study({
               tips={tipsRef}
               onOpenTips={openTips}
               speechRate={settings.speechRate}
+              clips={clips}
             />
           ) : (
-            <ItemInfo item={item} note={note} card={feedback.card} speechRate={settings.speechRate} />
+            <ItemInfo item={item} note={note} card={feedback.card} speechRate={settings.speechRate} clips={clips} />
           )}
           <button className="btn big" onClick={() => goNext()}>
             次へ

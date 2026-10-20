@@ -4,7 +4,7 @@ import type { FSRS } from "ts-fsrs";
 import { db, getMeta, getSettings } from "../data/db";
 import { sectionChapterIndex } from "../data/tips";
 import { makeScheduler } from "../srs/scheduler";
-import type { CardState, ChapterInfo, Item, ReviewLog, Round, Settings, TipsDoc, UserNote } from "../types";
+import type { AudioSeg, CardState, ChapterInfo, Item, ReviewLog, Round, Settings, TipsDoc, UserNote } from "../types";
 import { DEFAULT_SETTINGS } from "../types";
 
 export type StoreData = {
@@ -19,6 +19,8 @@ export type StoreData = {
   rounds: Round[];
   settings: Settings;
   lastBackupAt?: number;
+  audioKeys: Set<string>; // 端末に入っている公式音声（key だけ。音声そのものは鳴らすときに読む）
+  audioSegs: Map<string, AudioSeg>; // 単語の音声の「何秒〜何秒」
 };
 
 const EMPTY: StoreData = {
@@ -32,6 +34,8 @@ const EMPTY: StoreData = {
   logs: [],
   rounds: [],
   settings: DEFAULT_SETTINGS,
+  audioKeys: new Set(),
+  audioSegs: new Map(),
 };
 
 export type Store = StoreData & {
@@ -44,7 +48,7 @@ export function useStore(): Store {
   const [data, setData] = useState<StoreData>(EMPTY);
 
   const reload = useCallback(async () => {
-    const [items, chapters, tips, cards, notes, logs, rounds, settings, lastBackupAt] = await Promise.all([
+    const [items, chapters, tips, cards, notes, logs, rounds, settings, lastBackupAt, audioKeys, audioSegs] = await Promise.all([
       db.items.orderBy("order").toArray(),
       db.chapters.orderBy("key").toArray(),
       db.tips.toArray(),
@@ -54,6 +58,8 @@ export function useStore(): Store {
       db.rounds.toArray(),
       getSettings(),
       getMeta<number | undefined>("lastBackupAt", undefined),
+      db.audio.toCollection().primaryKeys(),
+      db.audioSegs.toArray(),
     ]);
     setData({
       loaded: true,
@@ -67,6 +73,8 @@ export function useStore(): Store {
       rounds,
       settings,
       lastBackupAt,
+      audioKeys: new Set(audioKeys),
+      audioSegs: new Map(audioSegs.map((s) => [s.id, s])),
     });
   }, []);
 

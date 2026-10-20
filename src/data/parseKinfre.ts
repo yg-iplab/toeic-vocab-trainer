@@ -20,6 +20,7 @@ const FIELD_KEYS: Record<string, keyof RawEntry> = {
   例文JA: "example_ja",
   穴あき: "example_en_blank",
   右欄補足: "notes_right",
+  例文補完: "example_fixed",
   出るパート: "appear_parts",
   覚え方: "mnemonic",
   ミス: "wrong_note",
@@ -36,6 +37,7 @@ type RawEntry = {
   example_ja?: string;
   example_en_blank?: string;
   notes_right?: string;
+  example_fixed?: string;
   appear_parts?: string;
   mnemonic?: string;
   wrong_note?: string;
@@ -107,6 +109,7 @@ function toItem(raw: RawEntry): KinfreItem | string {
     example_ja: clean(raw.example_ja),
     example_en_blank: clean(raw.example_en_blank),
     notes_right: clean(raw.notes_right),
+    example_fixed: clean(raw.example_fixed),
     appear_parts: clean(raw.appear_parts)?.split(/[・,、\s]+/).filter(Boolean),
     quality: clean(raw.quality),
     mnemonic_src: clean(raw.mnemonic),

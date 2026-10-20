@@ -1,5 +1,6 @@
 // 回答後の教材の見せ方（例文の全文・読み取り漏れの印・解説から拾う語彙）。架空の文だけで確かめる
 import { describe, expect, it } from "vitest";
+import { parseKinfreMarkdown } from "../src/data/parseKinfre";
 import { exampleMissesWord, exampleText, vocabFromExplanation } from "../src/lib/itemText";
 
 describe("例文", () => {
@@ -17,6 +18,27 @@ describe("例文", () => {
     expect(exampleMissesWord({ word: "fictword", example_en: "We read f" })).toBe(true); // 頭文字だけ残った
     expect(exampleMissesWord({ word: "fictword", example_en: "We read" })).toBe(true);
     expect(exampleMissesWord({ word: "fictword" })).toBe(false); // 例文が無ければ印を出さない
+  });
+});
+
+describe("音声から補った例文の印", () => {
+  it("章ファイルの「例文補完」を読み、印として持つ（無い語は印なし）", () => {
+    const md = [
+      "## 001 fictword",
+      "- 番号: kinfre-0001",
+      "- 章: 架空 / track 1",
+      "- 日本語訳: 架空の意味",
+      "- 例文EN: We fictword it.",
+      "- 穴あき: We f--- it.",
+      "- 例文補完: 架空の補い方（20261020）",
+      "## 002 fictother",
+      "- 番号: kinfre-0002",
+      "- 章: 架空 / track 1",
+      "- 日本語訳: 架空の意味2",
+    ].join("\n");
+    const { items } = parseKinfreMarkdown(md);
+    expect(items.map((i) => i.example_fixed)).toEqual(["架空の補い方（20261020）", undefined]);
+    expect(exampleMissesWord(items[0])).toBe(false);
   });
 });
 

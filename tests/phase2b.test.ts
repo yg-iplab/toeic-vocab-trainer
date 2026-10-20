@@ -223,7 +223,7 @@ describe("DB の版上げ（版2 → 版3）", () => {
     const upgraded = new TrainerDB(name);
     useDatabase(upgraded);
     await upgraded.open();
-    expect(upgraded.verno).toBe(3);
+    expect(upgraded.verno).toBe(4); // 版4（音声の表）まで一気に上がる。版3の表はそのまま
     for (const [table, rows] of Object.entries(before)) expect(await upgraded.table(table).toArray()).toEqual(rows);
     expect(await upgraded.tips.count()).toBe(0);
 
