@@ -1205,6 +1205,13 @@ code {
   background: var(--accent-soft);
 }
 
+/* 鳴らせなかったときの理由（ボタンの中に2行目で） */
+.speak-btn .speak-fail {
+  display: block;
+  margin: 2px 0 0;
+  color: var(--ng);
+}
+
 /* バックアップの保存先の案内 */
 .backup-place {
   margin: 8px 0 10px;

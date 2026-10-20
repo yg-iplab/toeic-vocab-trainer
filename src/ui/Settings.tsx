@@ -440,7 +440,7 @@ export function Settings({ store }: { store: Store }) {
         />
         <p className="sub">🔊 のボタンは、公式音声を読み込んだ語・問題では公式音声（「公式」）、それ以外は端末の読み上げ機能（「合成」）で鳴ります。速さはどちらにも効きます。iPhone で鳴らないときは、マナーモード（消音）を切ってください。</p>
       </section>
-      <p className="footer-note">TOEIC単語・文法トレーナー v0.6（個人用の非公式ツール）・教材データはこの端末の中だけにあります</p>
+      <p className="footer-note">TOEIC単語・文法トレーナー v0.7（個人用の非公式ツール）・教材データはこの端末の中だけにあります</p>
     </div>
   );
 }

@@ -1,7 +1,7 @@
 // オフラインで起動するための Service Worker（教材データはここでは扱わない。IndexedDB 側にある）
 // - 画面（HTML）: ネット優先。つながらなければ保存済みのものを使う
 // - JS・CSS・画像: 保存済み優先。初回に取ってきたものを保存する
-const CACHE = "vocab-trainer-v6";
+const CACHE = "vocab-trainer-v7";
 const SHELL = ["./", "./index.html", "./manifest.webmanifest", "./icon.svg", "./icon-192.png", "./apple-touch-icon.png"];
 
 self.addEventListener("install", (event) => {

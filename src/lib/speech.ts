@@ -18,7 +18,7 @@ function englishVoice(): SpeechSynthesisVoice | undefined {
 }
 
 /** 読み上げる（前の読み上げは止める）。読めないときは false */
-export function speak(text: string, rate = 1): boolean {
+export function speak(text: string, rate = 1, onFail?: (why: string) => void): boolean {
   if (!canSpeak() || !text.trim()) return false;
   stopClip();
   const synth = window.speechSynthesis;
@@ -28,6 +28,9 @@ export function speak(text: string, rate = 1): boolean {
   u.rate = rate;
   const voice = englishVoice();
   if (voice) u.voice = voice;
+  u.onerror = (e) => {
+    if (e.error !== "canceled" && e.error !== "interrupted") onFail?.(`読み上げできません（${e.error}）`);
+  };
   synth.speak(u);
   return true;
 }

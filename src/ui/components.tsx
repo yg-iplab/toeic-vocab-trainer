@@ -1,7 +1,6 @@
 // 画面どうしで使い回す部品
 import { useEffect, useState, type ReactNode } from "react";
-import type { ClipRef, ItemClips } from "../data/audio";
-import { db } from "../data/db";
+import { loadAudioBlob, type ClipRef, type ItemClips } from "../data/audio";
 import { noLabel } from "../data/stats";
 import { tipsButtonLabel, type TipsRef } from "../data/tips";
 import { exampleMissesWord, exampleText, vocabFromExplanation } from "../lib/itemText";
@@ -63,7 +62,7 @@ export function WordHead({ item }: { item: KinfreItem }) {
   );
 }
 
-const loadAudio = async (key: string) => (await db.audio.get(key))?.blob;
+const loadAudio = loadAudioBlob;
 
 /** 公式音声の URL を、画面を出したときに用意しておく（押した直後に鳴らせるように） */
 function useClipUrl(key?: string): string | undefined {
@@ -92,24 +91,29 @@ function stopSynth() {
  */
 export function SpeakButton({ text, label, rate, clip }: { text: string; label: string; rate?: number; clip?: ClipRef }) {
   const url = useClipUrl(clip?.key);
+  // 鳴らせなかったときの理由（黙って終わらないように、ボタンの中に出す）
+  const [fail, setFail] = useState("");
   if (clip) {
     const play = async () => {
+      setFail("");
       const u = url ?? (await clipUrl(clip.key, loadAudio));
-      if (u) playClip(u, clip.range, rate ?? 1, stopSynth);
-      else speak(text, rate);
+      if (u) playClip(u, clip.range, rate ?? 1, stopSynth, setFail);
+      else speak(text, rate, setFail);
     };
     return (
       <button type="button" className="speak-btn official" onClick={play}>
         🔊 {label}
         <small>（公式）</small>
+        {fail && <small className="speak-fail">⚠ {fail}</small>}
       </button>
     );
   }
   if (!canSpeak() || !text.trim()) return null;
   return (
-    <button type="button" className="speak-btn" onClick={() => speak(text, rate)}>
+    <button type="button" className="speak-btn" onClick={() => (setFail(""), speak(text, rate, setFail))}>
       🔊 {label}
       <small>（合成）</small>
+      {fail && <small className="speak-fail">⚠ {fail}</small>}
     </button>
   );
 }

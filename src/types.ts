@@ -82,7 +82,11 @@ export type AudioRow = {
   key: string;
   deck: Deck;
   track?: number;
-  blob: Blob;
+  /** 音声のバイト列（v0.7〜）。iPhone は Blob のままだと IndexedDB に入らない・後で読めないことがあるので、バイト列で持つ */
+  data?: ArrayBuffer;
+  type?: string; // 例 "audio/mpeg"
+  /** v0.6 までに入れた音声（Blob のまま） */
+  blob?: Blob;
   size: number; // バイト数（一覧で容量を出すため）
   name: string; // 元のファイル名
   importedAt: number;

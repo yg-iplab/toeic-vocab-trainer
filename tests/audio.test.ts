@@ -3,7 +3,7 @@
 import "fake-indexeddb/auto";
 import Dexie from "dexie";
 import { beforeEach, describe, expect, it } from "vitest";
-import { audioSummary, classifyAudio, clipsFor, deleteAudio, formatBytes, importAudioFiles, parseAudioIndex } from "../src/data/audio";
+import { audioSummary, classifyAudio, clipsFor, deleteAudio, formatBytes, importAudioFiles, loadAudioBlob, parseAudioIndex } from "../src/data/audio";
 import { buildBackup } from "../src/data/backup";
 import { db, TrainerDB, upsertItems, useDatabase } from "../src/data/db";
 import { listZip, readZipEntry } from "../src/lib/zip";
@@ -90,18 +90,26 @@ describe("音声の取り込み", () => {
           { id: "kinfre-0001", track: 1, word: [0.4, 1.0], example: [1.4, 3.0] },
           { id: "kinfre-0002", track: 1, word: [3.4, 4.0], example: [4.4, 6.0] },
         ]),
+        // 同じフォルダにある別の JSON（例文の補完の記録）を一緒に選んでも止まらない
+        new File([JSON.stringify({ app: "kinfre-trainer", kind: "example-fixes", items: [] })], "kinfre_example_fixes.json", { type: "application/json" }),
       ],
       { wantTracks: new Set([1]), now: NOW, onProgress: (d, t) => progress.push(`${d}/${t}`) },
     );
     expect(r.added).toEqual({ kinfre: 1, deru1000: 1 });
     expect(r.bytes).toBe(6000);
     expect(r.segs).toBe(2);
-    expect(r.skipped).toEqual(["fict_en05.mp3: 時間の表で使わない音声（Supplement など）なので入れません", "readme.txt: このアプリで使う音声ではないので入れません"]);
+    expect(r.skipped).toEqual([
+      "kinfre_example_fixes.json: 時間の表ではないので使いません",
+      "fict_en05.mp3: 時間の表で使わない音声（Supplement など）なので入れません",
+      "readme.txt: このアプリで使う音声ではないので入れません",
+    ]);
     expect(progress).toEqual(["0/2", "1/2", "2/2"]);
 
     const row = await db.audio.get("kinfre-en-01");
     expect(row).toMatchObject({ deck: "kinfre", track: 1, size: 4000, name: "fict_en01.mp3", importedAt: NOW });
-    expect(row?.blob.type).toBe("audio/mpeg");
+    expect(row?.type).toBe("audio/mpeg");
+    expect(row?.data?.byteLength).toBe(4000);
+    expect((await loadAudioBlob("kinfre-en-01"))?.size).toBe(4000);
     expect(await audioSummary()).toEqual({ kinfre: { files: 1, bytes: 4000 }, deru1000: { files: 1, bytes: 2000 }, segs: 2 });
 
     // 鳴らす場所：単語は track の何秒〜何秒、文法は1問1本

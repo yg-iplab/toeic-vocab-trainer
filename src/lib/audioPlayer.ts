@@ -52,7 +52,7 @@ export function clipSrc(url: string, range?: [number, number]): string {
  * 鳴らす。range があれば、その秒だけ（終わりで止める）。rate は速さ（1 がふつう）
  * 止める仕組みは2重：メディアフラグメントの終わり＋タイマー（フラグメントに対応しない端末のため）
  */
-export function playClip(url: string, range: [number, number] | undefined, rate = 1, stopOthers?: () => void): boolean {
+export function playClip(url: string, range: [number, number] | undefined, rate = 1, stopOthers?: () => void, onFail?: (why: string) => void): boolean {
   stopClip();
   stopOthers?.();
   if (typeof Audio === "undefined") return false;
@@ -66,9 +66,16 @@ export function playClip(url: string, range: [number, number] | undefined, rate 
     const seek = () => {
       if (Math.abs(audio.currentTime - start) > 0.3) audio.currentTime = start;
     };
+    // タイマーが来たら、本当に終わりまで進んだかを見てから止める（再生の出だしが遅れても語の終わりを切らない）
     const arm = () => {
       clearTimeout(stopTimer);
-      stopTimer = setTimeout(() => audio.pause(), Math.max(0, ((end - audio.currentTime) / rate) * 1000) + 80);
+      if (audio.paused) return;
+      const left = end - audio.currentTime;
+      if (left <= 0.03) {
+        audio.pause();
+        return;
+      }
+      stopTimer = setTimeout(arm, Math.max(20, (left / rate) * 1000));
     };
     const check = () => {
       if (audio.currentTime >= end) audio.pause();
@@ -78,6 +85,8 @@ export function playClip(url: string, range: [number, number] | undefined, rate 
     audio.addEventListener("timeupdate", check);
     onStop = () => audio.removeEventListener("timeupdate", check);
   }
-  void audio.play()?.catch(() => undefined);
+  const fail = () => onFail?.(audio.error ? `読み込めません（${audio.error.code}）` : "読み込めません");
+  audio.addEventListener("error", fail, { once: true });
+  void audio.play()?.catch((e: Error) => onFail?.(e.name === "NotAllowedError" ? "もう一度押してください" : `鳴らせません（${e.name}）`));
   return true;
 }

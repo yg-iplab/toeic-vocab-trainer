@@ -77,7 +77,19 @@ export async function importAudioFiles(
   const tasks: Task[] = [];
   // 時間の表を先に読む（どの音声ファイルを使うかが決まる）
   for (const f of files.filter((f) => /\.json$/i.test(f.name))) {
-    const segs = parseAudioIndex(await f.text());
+    const text = await f.text();
+    // フォルダの中を全部選んでも止まらないように、時間の表でない JSON（例文の補完の記録など）は飛ばす
+    let kind: unknown;
+    try {
+      kind = (JSON.parse(text) as { kind?: unknown }).kind;
+    } catch {
+      kind = undefined;
+    }
+    if (kind !== "audio-index") {
+      result.skipped.push(`${f.name}: 時間の表ではないので使いません`);
+      continue;
+    }
+    const segs = parseAudioIndex(text);
     await db.audioSegs.bulkPut(segs);
     result.segs += segs.length;
   }
@@ -116,14 +128,25 @@ export async function importAudioFiles(
   let done = 0;
   opts.onProgress?.(done, tasks.length);
   for (const t of tasks) {
-    const blob = await t.read();
-    const row: AudioRow = { key: t.target.key, deck: t.target.deck, track: t.target.track, blob, size: blob.size, name: t.name, importedAt: opts.now };
+    // Safari（WebKit）は Blob を IndexedDB に入れられないことがある（プライベートでは必ず
+    // 「Error preparing Blob/File data to be stored in object store」）。バイト列（ArrayBuffer）にして入れる
+    const raw = await t.read();
+    const data = await raw.arrayBuffer();
+    const row: AudioRow = { key: t.target.key, deck: t.target.deck, track: t.target.track, data, type: raw.type || mimeOf(t.name), size: data.byteLength, name: t.name, importedAt: opts.now };
     await db.audio.put(row);
     result.added[t.target.deck]++;
-    result.bytes += blob.size;
+    result.bytes += data.byteLength;
     opts.onProgress?.(++done, tasks.length);
   }
   return result;
+}
+
+/** 端末に入れた音声を、鳴らせる Blob にして返す（v0.6 までの Blob の行もそのまま使う） */
+export async function loadAudioBlob(key: string): Promise<Blob | undefined> {
+  const row = await db.audio.get(key);
+  if (!row) return undefined;
+  if (row.data) return new Blob([row.data], { type: row.type || "audio/mpeg" });
+  return row.blob;
 }
 
 /** 教材ごとに音声を消す（単語は時間の表も） */
