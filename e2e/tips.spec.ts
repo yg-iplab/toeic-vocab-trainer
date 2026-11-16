@@ -179,7 +179,8 @@ test("解き方：読み込み → ホーム・回答後・詳細から読む �
 
   // 今日の学習：最近ミスした分野（X）の、まだ解いていない問題が「類題」で出る
   await page.getByRole("button", { name: "ホーム", exact: true }).click();
-  await page.getByRole("button", { name: /今日の学習（10問）/ }).click();
+  // v0.8〜 ボタンの問題数は「残っている数」（復習＋今日の新しい問題）
+  await page.getByRole("button", { name: /今日の学習（\d+問）/ }).click();
   const similarNos: number[] = [];
   for (let guard = 0; guard < 14; guard++) {
     if (await page.locator(".score").isVisible()) break;

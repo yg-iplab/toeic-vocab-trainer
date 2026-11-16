@@ -75,6 +75,7 @@ test("回答後：例文は全文・読み取り漏れの印・右欄補足は�
   await page.getByRole("button", { name: /1周目を始める（4語）/ }).click();
   await page.locator(".choice").filter({ hasNotText: /^架空の意味1$/ }).first().click();
   await expect(page.locator(".example-en")).toHaveText("We fictword1ed the plan."); // 穴あき（f---）ではなく全文
+  await expect(page.locator(".example-en .hl")).toHaveText("fictword1ed"); // v0.8〜 見出し語（活用形も）を太字
   await expect(page.locator(".example-warn")).toHaveCount(0);
   await expect(page.getByText("架空の補足1 fictnoun1 名 架空の名詞")).toBeVisible(); // 右欄補足は開いている
   await page.screenshot({ path: "test-results/itemtext_01_word.png", fullPage: true });
@@ -82,6 +83,7 @@ test("回答後：例文は全文・読み取り漏れの印・右欄補足は�
 
   await page.locator(".choice").filter({ hasNotText: /^架空の意味2$/ }).first().click();
   await expect(page.locator(".example-en")).toHaveText("We read f");
+  await expect(page.locator(".example-en .hl")).toHaveCount(0); // 見出し語が無い例文は太字にしない
   await expect(page.locator(".example-warn")).toContainText("見出し語が読み取れていません");
   await expect(page.getByText("架空の補足2")).toBeVisible();
   await page.screenshot({ path: "test-results/itemtext_02_word_missing.png", fullPage: true });

@@ -3,7 +3,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { loadAudioBlob, type ClipRef, type ItemClips } from "../data/audio";
 import { noLabel } from "../data/stats";
 import { tipsButtonLabel, type TipsRef } from "../data/tips";
-import { exampleMissesWord, exampleText, vocabFromExplanation } from "../lib/itemText";
+import { cleanExample, exampleMissesWord, exampleText, highlightParts, vocabFromExplanation } from "../lib/itemText";
 import { clipUrl, playClip, readyUrl } from "../lib/audioPlayer";
 import { canSpeak, filledSentence, speak } from "../lib/speech";
 import { LETTERS, type CardState, type ChapterInfo, type DeruItem, type Item, type KinfreItem, type Status, type UserNote } from "../types";
@@ -85,11 +85,41 @@ function stopSynth() {
   if (canSpeak()) window.speechSynthesis.cancel();
 }
 
+/** 公式音声の URL を先に用意しておく（問題を出したとき。回答の直後に鳴らせるように） */
+export function preloadClip(clip?: ClipRef) {
+  if (clip) void clipUrl(clip.key, loadAudio);
+}
+
+/**
+ * 公式音声をすぐ鳴らす（回答のボタンを押した処理の中で呼ぶ。iPhone は押した直後でないと鳴らないことがある）
+ * URL がまだ用意できていなければ、用意できしだい鳴らす（iPhone では鳴らないことがある。そのときは 🔊 を押す）
+ */
+export function playOfficialNow(clip: ClipRef, rate: number) {
+  const u = readyUrl(clip.key);
+  if (u) {
+    playClip(u, clip.range, rate, stopSynth);
+    return;
+  }
+  void clipUrl(clip.key, loadAudio).then((x) => x && playClip(x, clip.range, rate, stopSynth));
+}
+
 /**
  * 発音を聞くボタン。公式音声が端末にあればそれを（「公式」）、無ければ端末の読み上げ機能（「合成」）で鳴らす
  * どちらも無い端末では出さない
  */
-export function SpeakButton({ text, label, rate, clip }: { text: string; label: string; rate?: number; clip?: ClipRef }) {
+export function SpeakButton({
+  text,
+  label,
+  rate,
+  officialRate,
+  clip,
+}: {
+  text: string;
+  label: string;
+  rate?: number; // 合成音声の速さ
+  officialRate?: number; // 公式音声の速さ（v0.8〜 合成とは別）
+  clip?: ClipRef;
+}) {
   const url = useClipUrl(clip?.key);
   // 鳴らせなかったときの理由（黙って終わらないように、ボタンの中に出す）
   const [fail, setFail] = useState("");
@@ -97,7 +127,7 @@ export function SpeakButton({ text, label, rate, clip }: { text: string; label: 
     const play = async () => {
       setFail("");
       const u = url ?? (await clipUrl(clip.key, loadAudio));
-      if (u) playClip(u, clip.range, rate ?? 1, stopSynth, setFail);
+      if (u) playClip(u, clip.range, officialRate ?? 1, stopSynth, setFail);
       else speak(text, rate, setFail);
     };
     return (
@@ -138,30 +168,45 @@ export function ItemInfo({
   note,
   card,
   speechRate,
+  officialRate,
   clips = {},
 }: {
   item: KinfreItem;
   note?: UserNote;
   card?: CardState;
   speechRate?: number;
+  officialRate?: number;
   clips?: ItemClips;
 }) {
-  const example = exampleText(item);
+  const raw = exampleText(item);
+  // v0.8〜 表示のときだけ読み取りのかけらを落とし、見出し語を太字にする（章ファイルは書き換えない）
+  const example = raw ? cleanExample(raw, item.word) : undefined;
+  const missing = exampleMissesWord(item);
   return (
     <div className="item-info">
       <p className="ja">{item.ja}</p>
       <div className="speak-row">
-        <SpeakButton text={item.word} label="単語" rate={speechRate} clip={clips.word} />
-        {(example || clips.example) && <SpeakButton text={example ?? ""} label="例文" rate={speechRate} clip={clips.example} />}
+        <SpeakButton text={item.word} label="単語" rate={speechRate} officialRate={officialRate} clip={clips.word} />
+        {(example || clips.example) && <SpeakButton text={example ?? ""} label="例文" rate={speechRate} officialRate={officialRate} clip={clips.example} />}
       </div>
       {(example || item.example_ja) && (
         <div className="example">
           {example && (
             <p lang="en" className="example-en">
-              {example}
+              {missing
+                ? example
+                : highlightParts(example, item.word).map((part, i) =>
+                    part.hit ? (
+                      <b key={i} className="hl">
+                        {part.text}
+                      </b>
+                    ) : (
+                      <span key={i}>{part.text}</span>
+                    ),
+                  )}
             </p>
           )}
-          {example && exampleMissesWord(item) && (
+          {example && missing && (
             <p className="example-warn">
               ⚠ この例文は見出し語が読み取れていません（教材データの読み取り漏れ）{clips.example ? "。🔊 例文（公式）で全文を聞けます" : ""}
             </p>
@@ -296,6 +341,7 @@ export function Part5Info({
   tips,
   onOpenTips,
   speechRate,
+  officialRate,
   clips = {},
 }: {
   item: DeruItem;
@@ -306,6 +352,7 @@ export function Part5Info({
   tips?: TipsRef; // 解き方の全文（読み込んであれば）
   onOpenTips?: () => void;
   speechRate?: number;
+  officialRate?: number;
   clips?: ItemClips;
 }) {
   const answerText = item.choices[LETTERS.indexOf(item.answer)] ?? "";
@@ -315,7 +362,7 @@ export function Part5Info({
         正解 <b lang="en">{choiceLabel(item, LETTERS.indexOf(item.answer))}</b>
       </p>
       <div className="speak-row">
-        <SpeakButton text={filledSentence(item.stem, answerText)} label="正解の文を聞く" rate={speechRate} clip={clips.sentence} />
+        <SpeakButton text={filledSentence(item.stem, answerText)} label="正解の文を聞く" rate={speechRate} officialRate={officialRate} clip={clips.sentence} />
         <SpeakButton text={answerText} label="正解の語句" rate={speechRate} />
       </div>
       {item.explanation && (

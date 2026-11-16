@@ -21,6 +21,7 @@ export type StoreData = {
   lastBackupAt?: number;
   audioKeys: Set<string>; // 端末に入っている公式音声（key だけ。音声そのものは鳴らすときに読む）
   audioSegs: Map<string, AudioSeg>; // 単語の音声の「何秒〜何秒」
+  error?: unknown; // データベースを開けなかったとき（「読み込み中…」のまま止めずに理由を出す）
 };
 
 const EMPTY: StoreData = {
@@ -44,38 +45,48 @@ export type Store = StoreData & {
   chapterOfSection: (section: string) => string | undefined; // 分野 → いちばん問題の多い章
 };
 
+/** 端末内のデータベースから全部読む */
+async function loadAll(): Promise<StoreData> {
+  const [items, chapters, tips, cards, notes, logs, rounds, settings, lastBackupAt, audioKeys, audioSegs] = await Promise.all([
+    db.items.orderBy("order").toArray(),
+    db.chapters.orderBy("key").toArray(),
+    db.tips.toArray(),
+    db.cards.toArray(),
+    db.notes.toArray(),
+    db.logs.orderBy("ts").toArray(),
+    db.rounds.toArray(),
+    getSettings(),
+    getMeta<number | undefined>("lastBackupAt", undefined),
+    db.audio.toCollection().primaryKeys(),
+    db.audioSegs.toArray(),
+  ]);
+  return {
+    loaded: true,
+    items,
+    itemsById: new Map(items.map((i) => [i.id, i])),
+    chapters: new Map(chapters.sort((a, b) => a.order - b.order).map((c) => [c.key, c])),
+    tips: new Map(tips.map((t) => [t.key, t])),
+    cards: new Map(cards.map((c) => [c.id, c])),
+    notes: new Map(notes.map((n) => [n.id, n])),
+    logs,
+    rounds,
+    settings,
+    lastBackupAt,
+    audioKeys: new Set(audioKeys),
+    audioSegs: new Map(audioSegs.map((s) => [s.id, s])),
+  };
+}
+
 export function useStore(): Store {
   const [data, setData] = useState<StoreData>(EMPTY);
 
   const reload = useCallback(async () => {
-    const [items, chapters, tips, cards, notes, logs, rounds, settings, lastBackupAt, audioKeys, audioSegs] = await Promise.all([
-      db.items.orderBy("order").toArray(),
-      db.chapters.orderBy("key").toArray(),
-      db.tips.toArray(),
-      db.cards.toArray(),
-      db.notes.toArray(),
-      db.logs.orderBy("ts").toArray(),
-      db.rounds.toArray(),
-      getSettings(),
-      getMeta<number | undefined>("lastBackupAt", undefined),
-      db.audio.toCollection().primaryKeys(),
-      db.audioSegs.toArray(),
-    ]);
-    setData({
-      loaded: true,
-      items,
-      itemsById: new Map(items.map((i) => [i.id, i])),
-      chapters: new Map(chapters.sort((a, b) => a.order - b.order).map((c) => [c.key, c])),
-      tips: new Map(tips.map((t) => [t.key, t])),
-      cards: new Map(cards.map((c) => [c.id, c])),
-      notes: new Map(notes.map((n) => [n.id, n])),
-      logs,
-      rounds,
-      settings,
-      lastBackupAt,
-      audioKeys: new Set(audioKeys),
-      audioSegs: new Map(audioSegs.map((s) => [s.id, s])),
-    });
+    try {
+      setData(await loadAll());
+    } catch (e) {
+      // 開けなかった理由を画面に出す（それまでに読めた分はそのまま）
+      setData((d) => ({ ...d, error: e }));
+    }
   }, []);
 
   useEffect(() => {

@@ -9,7 +9,7 @@ import { RATING_LABEL, ratingForChoice } from "../srs/rating";
 import { previewDue } from "../srs/scheduler";
 import { poolOf, requeueIfWrong } from "../srs/session";
 import { deckSettings, type CardState, type Deck, type Format, type Question, type Rating } from "../types";
-import { choiceLabel, ItemInfo, Part5Head, Part5Info, ProgressBar, WordHead } from "./components";
+import { choiceLabel, ItemInfo, Part5Head, Part5Info, playOfficialNow, preloadClip, ProgressBar, WordHead } from "./components";
 import type { Store } from "./store";
 import { TipsSheetFor } from "./Tips";
 
@@ -20,6 +20,7 @@ export type Session = {
   questions: Question[];
   rid?: number;
   roundNo?: number;
+  extra?: boolean; // 今日の分が終わったあとの「追加で回す」
 };
 
 export type AnswerResult = { q: Question; correct: boolean; rating: Rating; ms: number; unsure: boolean };
@@ -86,6 +87,21 @@ export function Study({
 
   useEffect(() => stopSpeaking, []);
 
+  // 公式音声の URL を、問題を出したときに用意しておく（回答の直後に鳴らせるように）
+  useEffect(() => {
+    if (!q) return;
+    const c = clipsFor(q.item, store.audioKeys, store.audioSegs);
+    preloadClip(c.word ?? c.sentence);
+    preloadClip(c.example);
+  }, [q?.item.id, store.audioKeys, store.audioSegs]);
+
+  /** 単語の回答の直後に、見出し語の公式音声を鳴らす（設定でオン・公式音声のある語だけ。押した処理の中で呼ぶ） */
+  const autoPlay = () => {
+    if (!q || q.item.deck !== "kinfre" || !settings.autoPlayWord) return;
+    const word = clipsFor(q.item, store.audioKeys, store.audioSegs).word;
+    if (word) playOfficialNow(word, settings.officialRate);
+  };
+
   // 直前の回答で増えた「もう一度」と結果を取りこぼさないよう、最新の値を受け取れるようにする
   const goNext = (curQueue: Question[] = queue, curResults: AnswerResult[] = results) => {
     if (index + 1 >= curQueue.length) return onFinish(curResults);
@@ -99,7 +115,7 @@ export function Study({
 
   // 迷わず正解したときは、テンポよく自動で次へ
   useEffect(() => {
-    if (!feedback || !feedback.correct || feedback.rating !== 3 || !settings.autoNext || alwaysExplain || tipsOpen || tipsSeen.current) return;
+    if (!feedback || !feedback.correct || feedback.rating < 3 || !settings.autoNext || alwaysExplain || tipsOpen || tipsSeen.current) return;
     const t = setTimeout(() => goNext(), 700);
     return () => clearTimeout(t);
     // feedback が変わったとき（と解き方を開いたとき）だけ動かす
@@ -144,14 +160,19 @@ export function Study({
   async function choose(i: number) {
     if (feedback || !q?.choices) return;
     const ms = performance.now() - startedAt;
+    autoPlay(); // 記録の保存（await）より前に鳴らす
     const correct = i === q.answerIndex;
-    const rating = ratingForChoice(correct, ms, unsure, hardMs);
+    // はじめて解く単語か（セット内のもう一度ではなく、まだ一度も答えていない）
+    const before = cardsSeen.current.get(q.item.id) ?? store.cards.get(q.item.id);
+    const firstTime = q.item.deck === "kinfre" && settings.kinfreFirstEasy && !q.retry && (!before || before.fsrs.state === 0);
+    const rating = ratingForChoice(correct, ms, unsure, hardMs, firstTime);
     const done = await submit(correct, rating, ms, q.choiceIds?.[i]);
     if (done) setFeedback({ chosen: i, correct, rating, card: done.card, unsure });
   }
 
   function reveal() {
     revealMs.current = performance.now() - startedAt;
+    autoPlay();
     setRevealed(true);
   }
 
@@ -251,7 +272,7 @@ export function Study({
 
       {format === "flip" && revealed && previews && item.deck === "kinfre" && (
         <>
-          <ItemInfo item={item} note={note} card={card} speechRate={settings.speechRate} clips={clips} />
+          <ItemInfo item={item} note={note} card={card} speechRate={settings.speechRate} officialRate={settings.officialRate} clips={clips} />
           <div className="rate-grid">
             {([1, 2, 3, 4] as Rating[]).map((r) => (
               <button key={r} className={`rate rate-${r}`} onClick={() => rate(r)}>
@@ -292,10 +313,11 @@ export function Study({
               tips={tipsRef}
               onOpenTips={openTips}
               speechRate={settings.speechRate}
+              officialRate={settings.officialRate}
               clips={clips}
             />
           ) : (
-            <ItemInfo item={item} note={note} card={feedback.card} speechRate={settings.speechRate} clips={clips} />
+            <ItemInfo item={item} note={note} card={feedback.card} speechRate={settings.speechRate} officialRate={settings.officialRate} clips={clips} />
           )}
           <button className="btn big" onClick={() => goNext()}>
             次へ

@@ -310,6 +310,17 @@ h2 {
   display: block;
 }
 
+/* 今日の分が終わったとき（v0.8） */
+.done-today {
+  background: var(--ok-soft);
+}
+
+.done-msg {
+  margin: 8px 0 4px;
+  font-weight: 700;
+  color: var(--ok);
+}
+
 .round-label {
   font-weight: 700;
 }
@@ -1252,4 +1263,10 @@ code {
 .btn.disabled {
   opacity: 0.6;
   pointer-events: none;
+}
+
+/* 例文の中の見出し語（v0.8） */
+.example-en .hl {
+  font-weight: 700;
+  color: var(--accent);
 }

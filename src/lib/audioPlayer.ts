@@ -3,13 +3,26 @@
 
 let el: HTMLAudioElement | null = null;
 let stopTimer: ReturnType<typeof setTimeout> | undefined;
-let onStop: (() => void) | undefined;
+let detach: (() => void) | undefined; // いまの再生に付けた「止める係」を外す
+let active = false; // アプリの 🔊 で鳴らしている最中か
 
 // key → Blob の URL（最近使った数本だけ持つ。1本 数MB なので増やしすぎない）
 const urls = new Map<string, string>();
+const pending = new Map<string, Promise<string | undefined>>(); // 読み込み中（同じ音声を2回読まない）
 const MAX_URLS = 6;
 
-/** 音声の URL を用意する（同じ key は使い回す） */
+/** テスト用：持っている状態を空にする */
+export function __resetPlayerForTest() {
+  el = null;
+  clearTimeout(stopTimer);
+  stopTimer = undefined;
+  detach = undefined;
+  active = false;
+  urls.clear();
+  pending.clear();
+}
+
+/** 音声の URL を用意する（同じ key は使い回す。読み込み中に同じ key を頼まれても、読み込みは1回だけ） */
 export async function clipUrl(key: string, load: (key: string) => Promise<Blob | undefined>): Promise<string | undefined> {
   const hit = urls.get(key);
   if (hit) {
@@ -17,16 +30,26 @@ export async function clipUrl(key: string, load: (key: string) => Promise<Blob |
     urls.set(key, hit); // 最近使った順にする
     return hit;
   }
-  const blob = await load(key);
-  if (!blob) return undefined;
-  const url = URL.createObjectURL(blob);
-  urls.set(key, url);
-  while (urls.size > MAX_URLS) {
-    const [oldKey, oldUrl] = urls.entries().next().value as [string, string];
-    urls.delete(oldKey);
-    URL.revokeObjectURL(oldUrl);
+  const wait = pending.get(key);
+  if (wait) return wait;
+  const p = (async () => {
+    const blob = await load(key);
+    if (!blob) return undefined;
+    const url = URL.createObjectURL(blob);
+    urls.set(key, url);
+    while (urls.size > MAX_URLS) {
+      const [oldKey, oldUrl] = urls.entries().next().value as [string, string];
+      urls.delete(oldKey);
+      URL.revokeObjectURL(oldUrl);
+    }
+    return url;
+  })();
+  pending.set(key, p);
+  try {
+    return await p;
+  } finally {
+    pending.delete(key);
   }
-  return url;
 }
 
 /** すでに用意してある URL（無ければ undefined） */
@@ -34,13 +57,26 @@ export function readyUrl(key: string): string | undefined {
   return urls.get(key);
 }
 
+function audioEl(): HTMLAudioElement {
+  if (!el) {
+    const a = new Audio();
+    // 止めたあと、画面ロックの再生ボタンやイヤホンのボタンで1本（約13分）が続きから鳴らないようにする
+    a.addEventListener("play", () => {
+      if (!active) a.pause();
+    });
+    el = a;
+  }
+  return el;
+}
+
 /** 再生を止める */
 export function stopClip() {
   clearTimeout(stopTimer);
   stopTimer = undefined;
+  active = false;
+  detach?.();
+  detach = undefined;
   if (el && !el.paused) el.pause();
-  onStop?.();
-  onStop = undefined;
 }
 
 /** 音声の src（秒の指定はメディアフラグメント #t=開始,終了 で渡す） */
@@ -51,14 +87,27 @@ export function clipSrc(url: string, range?: [number, number]): string {
 /**
  * 鳴らす。range があれば、その秒だけ（終わりで止める）。rate は速さ（1 がふつう）
  * 止める仕組みは2重：メディアフラグメントの終わり＋タイマー（フラグメントに対応しない端末のため）
+ * 前の再生に付けた係はすべて外してから鳴らす（鳴り始める前に別の 🔊 を押しても、次の音がすぐ止まらない）
  */
 export function playClip(url: string, range: [number, number] | undefined, rate = 1, stopOthers?: () => void, onFail?: (why: string) => void): boolean {
   stopClip();
   stopOthers?.();
   if (typeof Audio === "undefined") return false;
-  el ??= new Audio();
-  const audio = el;
+  const audio = audioEl();
+  const offs: (() => void)[] = [];
+  const on = (type: string, fn: () => void, once = false) => {
+    audio.addEventListener(type, fn, once ? { once: true } : undefined);
+    offs.push(() => audio.removeEventListener(type, fn));
+  };
+  detach = () => offs.forEach((off) => off());
+  const finish = () => {
+    active = false;
+    clearTimeout(stopTimer);
+    audio.pause();
+  };
+
   audio.src = clipSrc(url, range);
+  audio.defaultPlaybackRate = rate;
   audio.playbackRate = rate;
   (audio as HTMLAudioElement & { preservesPitch?: boolean }).preservesPitch = true;
   if (range) {
@@ -71,22 +120,22 @@ export function playClip(url: string, range: [number, number] | undefined, rate 
       clearTimeout(stopTimer);
       if (audio.paused) return;
       const left = end - audio.currentTime;
-      if (left <= 0.03) {
-        audio.pause();
-        return;
-      }
+      if (left <= 0.03) return finish();
       stopTimer = setTimeout(arm, Math.max(20, (left / rate) * 1000));
     };
     const check = () => {
-      if (audio.currentTime >= end) audio.pause();
+      if (audio.currentTime >= end) finish();
     };
-    audio.addEventListener("loadedmetadata", seek, { once: true });
-    audio.addEventListener("playing", arm, { once: true });
-    audio.addEventListener("timeupdate", check);
-    onStop = () => audio.removeEventListener("timeupdate", check);
+    on("loadedmetadata", seek, true);
+    on("playing", arm, true);
+    on("timeupdate", check);
   }
-  const fail = () => onFail?.(audio.error ? `読み込めません（${audio.error.code}）` : "読み込めません");
-  audio.addEventListener("error", fail, { once: true });
-  void audio.play()?.catch((e: Error) => onFail?.(e.name === "NotAllowedError" ? "もう一度押してください" : `鳴らせません（${e.name}）`));
+  on("ended", () => (active = false), true);
+  on("error", () => onFail?.(audio.error ? `読み込めません（${audio.error.code}）` : "読み込めません"), true);
+  active = true;
+  void audio.play()?.catch((e: Error) => {
+    if (e.name === "AbortError") return; // 次の 🔊 で前の再生が中断されただけ
+    onFail?.(e.name === "NotAllowedError" ? "もう一度押してください" : `鳴らせません（${e.name}）`);
+  });
   return true;
 }

@@ -182,9 +182,11 @@ export type Settings = {
   setSize: number;
   hardMs: number; // これより遅い正解は「難しい」扱い
   newPerDay: number;
+  newStartNo: number; // 今日の学習の新しい語を、この番号から出す（最後まで行ったら最初へ）。v0.8〜
   format: KinfreFormat;
   includeSupplement: boolean;
   kinfreAlwaysExplain: boolean; // 4択の回答後、迷わず正解でも訳・例文・右欄の補足を開いたままにする（自動で次へは進まない）
+  kinfreFirstEasy: boolean; // はじめての語を4択で迷わず速く正解したら「簡単」（次は1週間ほど先）。v0.8〜
   // 文法（Part 5）
   deruSetSize: number;
   deruHardMs: number;
@@ -195,7 +197,9 @@ export type Settings = {
   examDate: string; // YYYY-MM-DD
   retention: number; // FSRS の目標保持率
   autoNext: boolean;
-  speechRate: number; // 発音ボタンの読み上げの速さ（1 がふつう）
+  speechRate: number; // 合成音声（端末の読み上げ）の速さ（1 がふつう）
+  officialRate: number; // 公式音声の速さ（v0.8〜。既定 1＝本番と同じ）
+  autoPlayWord: boolean; // 単語の回答後、見出し語の公式音声を自動で鳴らす（v0.8〜）
   // バックアップの保存先。アプリからは保存先を選べない（共有の画面で選ぶ）ので、書き出すたびにこの場所を案内する
   backupPlace: string;
 };
@@ -207,9 +211,11 @@ export const DEFAULT_SETTINGS: Settings = {
   setSize: 10,
   hardMs: 3000,
   newPerDay: 20,
+  newStartNo: 1,
   format: "mc",
   includeSupplement: false,
   kinfreAlwaysExplain: true,
+  kinfreFirstEasy: true,
   deruSetSize: 10,
   deruHardMs: 30000, // 本の目安は1問20〜30秒
   deruNewPerDay: 20,
@@ -219,14 +225,16 @@ export const DEFAULT_SETTINGS: Settings = {
   retention: 0.9,
   autoNext: true,
   speechRate: 0.9,
+  officialRate: 1,
+  autoPlayWord: true,
   backupPlace: DEFAULT_BACKUP_PLACE,
 };
 
 /** 教材ごとに分かれている設定を取り出す */
-export function deckSettings(s: Settings, deck: Deck): { setSize: number; hardMs: number; newPerDay: number } {
+export function deckSettings(s: Settings, deck: Deck): { setSize: number; hardMs: number; newPerDay: number; newStartNo: number } {
   return deck === "deru1000"
-    ? { setSize: s.deruSetSize, hardMs: s.deruHardMs, newPerDay: s.deruNewPerDay }
-    : { setSize: s.setSize, hardMs: s.hardMs, newPerDay: s.newPerDay };
+    ? { setSize: s.deruSetSize, hardMs: s.deruHardMs, newPerDay: s.deruNewPerDay, newStartNo: 1 }
+    : { setSize: s.setSize, hardMs: s.hardMs, newPerDay: s.newPerDay, newStartNo: s.newStartNo };
 }
 
 /** 出題1問分 */

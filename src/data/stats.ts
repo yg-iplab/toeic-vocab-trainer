@@ -21,11 +21,30 @@ export function firstDayById(logs: ReviewLog[]): Map<string, string> {
   return m;
 }
 
-/** 今日はじめて解いた語の数（1日の新規上限に使う） */
+/**
+ * 今日、今日の学習ではじめて解いた語の数（1日の新規上限に使う）
+ * 周回ではじめて解いた語は数えない（v0.8〜。周回をした日も、今日の学習に新しい語が出るように）
+ */
 export function newIntroducedOn(logs: ReviewLog[], day: string): number {
+  const first = new Map<string, ReviewLog>();
+  for (const l of logs.slice().sort((a, b) => a.ts - b.ts)) if (!first.has(l.id)) first.set(l.id, l);
   let n = 0;
-  for (const d of firstDayById(logs).values()) if (d === day) n++;
+  for (const l of first.values()) if (l.day === day && l.mode !== "round") n++;
   return n;
+}
+
+/**
+ * 苦手だけの周回の対象（v0.8〜・単語の本編）：番号の範囲の中で、ミスしたことのある語と、
+ * 最後の回答（セット内のもう一度を除く）が「難しい」（遅い正解・あやふや）だった語。番号順
+ */
+export function weakIds(items: Item[], cards: Map<string, CardState>, logs: ReviewLog[], from: number, to: number): string[] {
+  const last = new Map<string, ReviewLog>();
+  for (const l of logs.slice().sort((a, b) => a.ts - b.ts)) if (!l.retry) last.set(l.id, l);
+  return items
+    .filter((i) => i.deck === "kinfre" && i.part === "main" && i.no >= from && i.no <= to)
+    .sort((a, b) => a.order - b.order)
+    .filter((i) => (cards.get(i.id)?.miss_count ?? 0) > 0 || last.get(i.id)?.rating === 2)
+    .map((i) => i.id);
 }
 
 /** 類題を探すときに見る、最近のミスの日数 */

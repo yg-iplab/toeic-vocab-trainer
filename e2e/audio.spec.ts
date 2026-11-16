@@ -23,15 +23,18 @@ function grammarMd(): string {
 }
 
 const played = (page: Page) => page.evaluate(() => (window as unknown as { __played: string[] }).__played);
+const rates = (page: Page) => page.evaluate(() => (window as unknown as { __rates: number[] }).__rates);
 const spoken = (page: Page) => page.evaluate(() => (window as unknown as { __spoken: string[] }).__spoken);
 
 test("公式音声：読み込み → 🔊 が公式（決まった秒）／無い所は合成 → 開き直しても残る → 消せる", async ({ page }) => {
   await page.addInitScript(() => {
-    const w = window as unknown as { __played: string[]; __spoken: string[] };
+    const w = window as unknown as { __played: string[]; __spoken: string[]; __rates: number[] };
     w.__played = [];
     w.__spoken = [];
+    w.__rates = [];
     HTMLMediaElement.prototype.play = function (this: HTMLMediaElement) {
       w.__played.push(this.src);
+      w.__rates.push(this.playbackRate);
       return Promise.resolve();
     };
     window.speechSynthesis.speak = (u: SpeechSynthesisUtterance) => void w.__spoken.push(u.text);
@@ -74,19 +77,43 @@ test("公式音声：読み込み → 🔊 が公式（決まった秒）／無�
   await page.getByRole("button", { name: "周回を始める" }).click();
   await page.getByRole("button", { name: /1周目を始める（4語）/ }).click();
   await page.locator(".choice", { hasText: /^架空の意味1$/ }).click();
+  // v0.8〜 回答の直後に、見出し語の公式音声を自動で鳴らす（速さは公式の既定 100%）
+  await expect.poll(() => played(page)).toHaveLength(1);
+  expect((await played(page))[0]).toMatch(/^blob:.+#t=0\.40,1\.00$/);
+  expect((await rates(page))[0]).toBe(1);
   await page.getByRole("button", { name: "🔊 例文（公式）" }).click();
   await page.getByRole("button", { name: "🔊 単語（公式）" }).click();
   const srcs = await played(page);
-  expect(srcs).toHaveLength(2);
-  expect(srcs[0]).toMatch(/^blob:.+#t=1\.40,3\.00$/);
-  expect(srcs[1]).toMatch(/^blob:.+#t=0\.40,1\.00$/);
+  expect(srcs).toHaveLength(3);
+  expect(srcs[1]).toMatch(/^blob:.+#t=1\.40,3\.00$/);
+  expect(srcs[2]).toMatch(/^blob:.+#t=0\.40,1\.00$/);
+  // 合成音声の速さ（既定 90%）は公式音声にかからない
+  expect(await rates(page)).toEqual([1, 1, 1]);
   await page.screenshot({ path: "test-results/audio_02_word_official.png", fullPage: true });
   await page.getByRole("button", { name: "次へ" }).click();
   await page.locator(".choice", { hasText: /^架空の意味2$/ }).click();
   await expect(page.getByRole("button", { name: "🔊 例文（合成）" })).toBeVisible();
   await page.getByRole("button", { name: "🔊 例文（合成）" }).click();
   expect(await spoken(page)).toEqual(["The fictword2 is here."]);
+  expect(await played(page)).toHaveLength(3); // 公式音声の無い語は自動では鳴らさない
   await page.getByRole("button", { name: "✕ やめる" }).click();
+  await page.getByRole("button", { name: "ホームへ" }).click();
+
+  // 自動で鳴らす設定を切ると、回答しても鳴らない
+  await page.getByRole("button", { name: "設定", exact: true }).click();
+  const auto = page.getByLabel("回答の直後に、見出し語の公式音声を自動で鳴らす（公式音声を読み込んだ語だけ）");
+  await auto.click(); // 保存してから表示が変わる
+  await expect(auto).not.toBeChecked();
+  await page.getByRole("button", { name: "ホーム", exact: true }).click();
+  await page.getByRole("button", { name: "別の周回を始める" }).click();
+  await page.getByLabel("番号で指定").check();
+  await page.locator(".range-inputs input").last().fill("1");
+  await page.getByRole("button", { name: /2周目を始める（1語）/ }).click();
+  await page.locator(".choice", { hasText: /^架空の意味1$/ }).click();
+  await expect(page.getByText("○ 正解")).toBeVisible();
+  await page.waitForTimeout(300);
+  expect(await played(page)).toHaveLength(3);
+  await page.getByRole("button", { name: "次へ" }).click();
   await page.getByRole("button", { name: "ホームへ" }).click();
 
   // 文法：1問1本は区切らずに鳴らす。音声の無い問題は合成

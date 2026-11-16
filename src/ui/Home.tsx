@@ -1,9 +1,9 @@
 // ホーム画面（上で「単語」「文法」を切り替える。記録は1つのまま）
 import { useState } from "react";
 import { saveSettings } from "../data/db";
-import { dayStats, logsOfDeck, unit } from "../data/stats";
+import { dayStats, logsOfDeck, newIntroducedOn, unit } from "../data/stats";
 import { daysUntil, formatDayJa, localDay, streakDays } from "../lib/date";
-import { dueItems, poolOf } from "../srs/session";
+import { dailyLeft, poolOf } from "../srs/session";
 import { deckSettings, type Deck, type KinfreFormat, type Round } from "../types";
 import { BackupPlaceHint, ProgressBar } from "./components";
 import { backupDoneMessage } from "./Settings";
@@ -18,6 +18,7 @@ export function Home({
   activeRound,
   standalone,
   onDaily,
+  onExtra,
   onContinueRound,
   onNewRound,
   onBackup,
@@ -28,6 +29,7 @@ export function Home({
   activeRound?: Round;
   standalone: boolean;
   onDaily: () => void;
+  onExtra: () => void; // 今日の分が終わったあと、期限前の語を追加で回す
   onContinueRound: (r: Round) => void;
   onNewRound: () => void;
   onBackup: () => Promise<string | null>; // 書き出したファイル名（キャンセルなら null）
@@ -39,11 +41,21 @@ export function Home({
   const { settings } = store;
   const deck = settings.deck;
   const u = unit(deck);
-  const { setSize } = deckSettings(settings, deck);
-  const left = daysUntil(settings.examDate, now);
+  const { setSize, newStartNo } = deckSettings(settings, deck);
+  const daysLeft = daysUntil(settings.examDate, now);
   const pool = poolOf(store.items, settings);
-  const due = dueItems(pool, store.cards, now, store.scheduler).length;
-  const todayStat = dayStats(logsOfDeck(store.logs, deck), today);
+  const deckLogs = logsOfDeck(store.logs, deck);
+  const { due, newLeft } = dailyLeft({
+    items: store.items,
+    cards: store.cards,
+    settings,
+    now,
+    scheduler: store.scheduler,
+    newIntroducedToday: newIntroducedOn(deckLogs, today),
+  });
+  const doneToday = due === 0 && newLeft === 0;
+  const noun = deck === "deru1000" ? "問題" : "語"; // 画面の言い方（数えるときの「問」「語」とは別）
+  const todayStat = dayStats(deckLogs, today);
   const streak = streakDays(
     store.logs.map((l) => l.day),
     now,
@@ -69,7 +81,7 @@ export function Home({
     <div className="screen home">
       <section className="card exam">
         <p className="exam-label">TOEIC {formatDayJa(settings.examDate)}</p>
-        <p className="exam-days">{left > 0 ? <>あと <b>{left}</b> 日</> : left === 0 ? "今日が本番" : "試験日を過ぎています"}</p>
+        <p className="exam-days">{daysLeft > 0 ? <>あと <b>{daysLeft}</b> 日</> : daysLeft === 0 ? "今日が本番" : "試験日を過ぎています"}</p>
       </section>
 
       <div className="seg deck-switch" role="group" aria-label="教材">
@@ -124,12 +136,12 @@ export function Home({
         </section>
       ) : (
         <>
-          <section className="card">
+          <section className={`card ${doneToday ? "done-today" : ""}`}>
             <h2>今日の学習</h2>
             <p className="kpi">
-              復習の時期が来た{deck === "deru1000" ? "問題" : "語"} <b>{due}</b>
+              復習の時期が来た{noun} <b>{due}</b>
               <span className="sub">
-                今日 {todayStat.answered}問・正解 {todayStat.correct}
+                今日の新しい{noun} あと {newLeft}・今日 {todayStat.answered}問・正解 {todayStat.correct}
               </span>
             </p>
             {deck === "kinfre" && (
@@ -141,14 +153,30 @@ export function Home({
                 ))}
               </div>
             )}
-            <button className="btn big" onClick={onDaily}>
-              今日の学習（{setSize}問）
-            </button>
-            <p className="hint">
-              ミスした{deck === "deru1000" ? "問題" : "語"}・忘れかけの{deck === "deru1000" ? "問題" : "語"}が約{Math.round(settings.reviewRatio * 10)}割、ほかの
-              {deck === "deru1000" ? "問題" : "語"}が約{10 - Math.round(settings.reviewRatio * 10)}割で出ます。
-              {deck === "deru1000" && `目安は1問${deckSettings(settings, deck).hardMs / 1000}秒以内。`}
-            </p>
+            {doneToday ? (
+              <>
+                <p className="done-msg" role="status">
+                  ✅ 今日の分は終わりました
+                </p>
+                <p className="hint">
+                  時期が来た復習も、今日の新しい{noun}も残っていません。余った時間は公式問題集に回してかまいません。期限前の{noun}を回したいときだけ、下のボタンを押してください（試験の日に忘れかけていそうな{noun}から出ます）。
+                </p>
+                <button className="btn ghost" onClick={onExtra}>
+                  追加で回す（期限前の{noun}・{setSize}問）
+                </button>
+              </>
+            ) : (
+              <>
+                <button className="btn big" onClick={onDaily}>
+                  今日の学習（{Math.min(setSize, due + newLeft)}問）
+                </button>
+                <p className="hint">
+                  時期が来た復習を先に（1セットの約{Math.round(settings.reviewRatio * 10)}割まで）、残りに新しい{noun}
+                  {deck === "kinfre" && newStartNo > 1 ? `（${newStartNo}番から）` : ""}が出ます。両方なくなったら今日の分は終わりです。
+                  {deck === "deru1000" && `目安は1問${deckSettings(settings, deck).hardMs / 1000}秒以内。`}
+                </p>
+              </>
+            )}
           </section>
 
           <section className="card">

@@ -5,8 +5,9 @@ import { ensurePersisted, isStandalone } from "./data/persist";
 import { pickActiveRound, pickNextRoundNo, roundDeck, startMissedRound, startRound } from "./data/rounds";
 import { logsOfDeck, newIntroducedOn, recentMissIds, roundStats } from "./data/stats";
 import { localDay } from "./lib/date";
-import { buildDailySet, buildRoundSet, poolOf, type RoundScope } from "./srs/session";
+import { buildDailySet, buildExtraSet, buildRoundSet, poolOf, type RoundScope } from "./srs/session";
 import type { Round } from "./types";
+import { DbErrorScreen } from "./ui/DbErrorScreen";
 import { Detail } from "./ui/Detail";
 import { Home } from "./ui/Home";
 import { Records } from "./ui/Records";
@@ -64,7 +65,25 @@ export default function App() {
       newIntroducedToday: newIntroducedOn(deckLogs, localDay(now)),
       recentMissIds: recentMissIds(deckLogs, now),
     });
+    // 今日の分が終わっていたら、ホームの「今日の分は終わりました」に戻る
+    if (questions.length === 0) return setScreen({ name: "home" });
     begin({ deck, mode: "daily", label: "今日の学習", questions });
+  };
+
+  const startExtra = () => {
+    const questions = buildExtraSet({
+      items: store.items,
+      cards: store.cards,
+      settings: store.settings,
+      now: Date.now(),
+      rng: Math.random,
+      scheduler: store.scheduler,
+    });
+    if (questions.length === 0) {
+      alert("いま追加で回せる語がありません（直前の1時間に答えた語は出しません）。");
+      return;
+    }
+    begin({ deck, mode: "daily", label: "追加（期限前）", questions, extra: true });
   };
 
   const continueRound = async (r: Round) => {
@@ -94,6 +113,7 @@ export default function App() {
 
   const tab: Tab | null = screen.name === "home" || screen.name === "records" || screen.name === "settings" ? screen.name : null;
 
+  if (store.error) return <DbErrorScreen error={store.error} onRetry={store.reload} />;
   if (!store.loaded) return <div className="screen loading">読み込み中…</div>;
 
   let body;
@@ -105,6 +125,7 @@ export default function App() {
           activeRound={activeRound}
           standalone={standalone}
           onDaily={startDaily}
+          onExtra={startExtra}
           onContinueRound={continueRound}
           onNewRound={() => setScreen({ name: "roundSetup" })}
           onBackup={() => exportBackup(store)}
@@ -137,7 +158,7 @@ export default function App() {
           results={screen.results}
           round={round}
           roundMissedIds={missedIds}
-          onAgain={() => (screen.session.mode === "round" && round ? continueRound(round) : startDaily())}
+          onAgain={() => (screen.session.mode === "round" && round ? continueRound(round) : screen.session.extra ? startExtra() : startDaily())}
           onMissedRound={() => round && missedRound(round, missedIds)}
           onHome={() => setScreen({ name: "home" })}
           onOpen={(id) => setScreen({ name: "detail", id, back: screen })}

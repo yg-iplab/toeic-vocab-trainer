@@ -257,15 +257,15 @@ describe("文法の類題（今日の学習）", () => {
     useDatabase(new TrainerDB(`similar-${Date.now()}-${Math.random()}`));
   });
 
-  it("最近ミスした分野と同じ分野の、まだ解いていない問題を「新しい問題」の枠で先に出す", () => {
-    // 3番（アルファ）をミス。期限の来た復習は無いので、枠は 新しい問題5 → ほか → 番号順の埋め合わせ
+  it("最近ミスした分野と同じ分野の、まだ解いていない問題を「新しい問題」の枠の半分まで先に出す", () => {
+    // 3番（アルファ）をミス。期限の来た復習は無いので、10問すべてが新しい問題の枠：類題5 → 番号順5（v0.8〜 期限前の問題では埋めない）
     const cards = new Map([["deru1000-0003", missedCard("deru1000-0003")]]);
     const set = buildDailySet({ items, cards, settings, now: NOW, rng: seededRng(1), scheduler, newIntroducedToday: 0, recentMissIds: ["deru1000-0003"] });
     const by = (src: string) => set.filter((q) => q.source === src).map((q) => q.item.no).sort((a, b) => a - b);
     expect(set).toHaveLength(10);
     expect(by("similar")).toEqual([1, 5, 7, 9, 11]);
-    expect(by("other")).toEqual([3]);
-    expect(by("new")).toEqual([2, 4, 6, 8]);
+    expect(by("other")).toEqual([]);
+    expect(by("new")).toEqual([2, 4, 6, 8, 10]);
   });
 
   it("1日の新しい問題の上限は類題にも効く。ミスが無ければ今までどおり番号順", () => {

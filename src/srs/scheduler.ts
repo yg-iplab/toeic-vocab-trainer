@@ -1,5 +1,16 @@
 // 忘却曲線（FSRS）で「次にいつ出すか」を決める部分
-import { createEmptyCard, fsrs, type Card, type FSRS, type Grade } from "ts-fsrs";
+import {
+  BasicLearningStepsStrategy,
+  createEmptyCard,
+  fsrs,
+  Rating as FsrsRating,
+  State,
+  StrategyMode,
+  type Card,
+  type FSRS,
+  type Grade,
+  type TLearningStepsStrategy,
+} from "ts-fsrs";
 import { localDay } from "../lib/date";
 import type { CardState, Rating, Status, StoredFsrs } from "../types";
 
@@ -7,8 +18,26 @@ const STATE_REVIEW = 2;
 /** この日数以上もつ見込みになったら「覚えた」 */
 export const KNOWN_STABILITY_DAYS = 21;
 
+/**
+ * 学習の段階（覚えはじめの「1分 → 10分」と、忘れたあとの「10分」）の進め方（v0.8〜）
+ * ts-fsrs の標準では「難しい」（遅い正解・あやふや）は段階が進まず、何度正解しても6分後にまた出る。
+ * ここでは「難しい」でも「正解」と同じだけ段階を進める。記憶の強さの計算は「難しい」のまま（次の復習は速い正解より早い）
+ */
+export const advanceOnHard: TLearningStepsStrategy = (params, state, curStep) => {
+  const base = BasicLearningStepsStrategy(params, state, curStep);
+  if (state === State.Review || !base[FsrsRating.Hard]) return base;
+  const out = { ...base };
+  const good = base[FsrsRating.Good];
+  if (good) out[FsrsRating.Hard] = { ...good };
+  else delete out[FsrsRating.Hard]; // 最後の段階：「正解」と同じく、日単位の復習へ
+  return out;
+};
+
 export function makeScheduler(retention: number): FSRS {
-  return fsrs({ request_retention: retention, enable_fuzz: true, enable_short_term: true });
+  return fsrs({ request_retention: retention, enable_fuzz: true, enable_short_term: true }).useStrategy(
+    StrategyMode.LEARNING_STEPS,
+    advanceOnHard,
+  );
 }
 
 export function toStored(card: Card): StoredFsrs {

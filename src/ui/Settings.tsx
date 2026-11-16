@@ -70,6 +70,46 @@ function Choice({
   );
 }
 
+/** 今日の学習の新しい語を、どの番号から出すか（レベルの始まりから選ぶか、番号を入れる） */
+function NewStartChoice({ store, value, onChange }: { store: Store; value: number; onChange: (n: number) => void }) {
+  const starts = new Map<string, number>();
+  for (const i of store.items) {
+    if (i.deck !== "kinfre" || i.part !== "main") continue;
+    starts.set(i.section, Math.min(starts.get(i.section) ?? Infinity, i.no));
+  }
+  const options = [...starts.entries()].sort((a, b) => a[1] - b[1]);
+  const [draft, setDraft] = useState(String(value));
+  useEffect(() => setDraft(String(value)), [value]);
+  const commit = () => {
+    const n = Math.floor(Number(draft));
+    if (Number.isFinite(n) && n >= 1 && n !== value) onChange(n);
+    else setDraft(String(value));
+  };
+  return (
+    <div className="new-start">
+      <label>
+        今日の学習の新しい語を出す始まり
+        <select value={options.some(([, no]) => no === value) || value === 1 ? String(value) : "custom"} onChange={(e) => e.target.value !== "custom" && onChange(Number(e.target.value))}>
+          <option value="1">1番から（番号順）</option>
+          {options
+            .filter(([, no]) => no > 1)
+            .map(([section, no]) => (
+              <option key={section} value={no}>
+                {section}（{no}番〜）から
+              </option>
+            ))}
+          {!options.some(([, no]) => no === value) && value !== 1 && <option value="custom">{value}番から</option>}
+        </select>
+      </label>
+      <label className="inline-num">
+        番号で指定
+        <input type="number" inputMode="numeric" min={1} value={draft} onChange={(e) => setDraft(e.target.value)} onBlur={commit} />
+      </label>
+      <p className="sub">まだ解いていない語を、この番号から番号順に出します。最後まで行ったら1番へ戻ります。周回で解いた語は「今日の新しい語」に数えません。</p>
+    </div>
+  );
+}
+
 export function Settings({ store }: { store: Store }) {
   const [msg, setMsg] = useState<string | null>(null);
   const [skipped, setSkipped] = useState<string[]>([]);
@@ -357,10 +397,11 @@ export function Settings({ store }: { store: Store }) {
         <Choice
           label="これより遅い正解は「難しい」扱い"
           value={s.hardMs}
-          options={[2000, 3000, 4000, 5000, 7000]}
+          options={[2000, 3000, 4000, 5000, 6000, 7000]}
           format={(n) => `${n / 1000}秒`}
           onChange={(n) => update({ hardMs: n })}
         />
+        <p className="sub">4択は選択肢を読む時間もかかるので、遅い正解が多いときは6秒くらいにしてください（回答後に「難しい」が多く出るなら上げる）。</p>
         <Choice
           label="今日の学習で出す新しい語（1日）"
           value={s.newPerDay}
@@ -368,13 +409,22 @@ export function Settings({ store }: { store: Store }) {
           format={(n) => `${n}語`}
           onChange={(n) => update({ newPerDay: n })}
         />
+        <NewStartChoice store={store} value={s.newStartNo} onChange={(n) => update({ newStartNo: n })} />
         <label className="check">
           <input type="checkbox" checked={s.kinfreAlwaysExplain} onChange={(e) => update({ kinfreAlwaysExplain: e.target.checked })} />
           4択の回答後、訳・例文・右欄の補足をいつも見る（迷わず正解でも。自動で次へは進まない）
         </label>
         <label className="check">
+          <input type="checkbox" checked={s.kinfreFirstEasy} onChange={(e) => update({ kinfreFirstEasy: e.target.checked })} />
+          はじめての語を4択で迷わず速く正解したら「簡単」（次は1週間ほど先。当て推量のときは「あやふや」を押す）
+        </label>
+        <label className="check">
           <input type="checkbox" checked={s.includeSupplement} onChange={(e) => update({ includeSupplement: e.target.checked })} />
           今日の学習に Supplement も入れる
+        </label>
+        <label className="check">
+          <input type="checkbox" checked={s.autoPlayWord} onChange={(e) => update({ autoPlayWord: e.target.checked })} />
+          回答の直後に、見出し語の公式音声を自動で鳴らす（公式音声を読み込んだ語だけ）
         </label>
       </section>
 
@@ -432,15 +482,22 @@ export function Settings({ store }: { store: Store }) {
           迷わず正解したら自動で次へ（単語・文法の「いつも見る／いつも開く」を切ったとき）
         </label>
         <Choice
-          label="発音ボタンの読み上げの速さ"
+          label="公式音声の速さ"
+          value={s.officialRate}
+          options={[0.8, 0.9, 1]}
+          format={(n) => (n === 1 ? "ふつう（本番と同じ）" : `${Math.round(n * 100)}%`)}
+          onChange={(n) => update({ officialRate: n })}
+        />
+        <Choice
+          label="合成音声（端末の読み上げ）の速さ"
           value={s.speechRate}
           options={[0.7, 0.8, 0.9, 1]}
           format={(n) => (n === 1 ? "ふつう" : `${Math.round(n * 100)}%`)}
           onChange={(n) => update({ speechRate: n })}
         />
-        <p className="sub">🔊 のボタンは、公式音声を読み込んだ語・問題では公式音声（「公式」）、それ以外は端末の読み上げ機能（「合成」）で鳴ります。速さはどちらにも効きます。iPhone で鳴らないときは、マナーモード（消音）を切ってください。</p>
+        <p className="sub">🔊 のボタンは、公式音声を読み込んだ語・問題では公式音声（「公式」）、それ以外は端末の読み上げ機能（「合成」）で鳴ります。速さは公式と合成で別々に決められます。iPhone で鳴らないときは、マナーモード（消音）を切ってください。</p>
       </section>
-      <p className="footer-note">TOEIC単語・文法トレーナー v0.7（個人用の非公式ツール）・教材データはこの端末の中だけにあります</p>
+      <p className="footer-note">TOEIC単語・文法トレーナー v0.8（個人用の非公式ツール）・教材データはこの端末の中だけにあります</p>
     </div>
   );
 }

@@ -27,20 +27,47 @@ export function poolOf(items: Item[], settings: Pick<Settings, "includeSupplemen
   return items.filter((i) => i.deck === deck && (i.deck !== "kinfre" || settings.includeSupplement || i.part === "main"));
 }
 
+/** 訳を意味ごとに分ける（「／」「、」などで区切り、かっこの中・〜・空白を外す）。誤答の重なりを見るため */
+export function meaningParts(ja: string): string[] {
+  return ja
+    .replace(/[（(][^）)]*[）)]/g, "")
+    .split(/[／/、，,；;]/)
+    .map((s) => s.replace(/[〜～~\s]/g, ""))
+    .filter((s) => s.length > 0);
+}
+
+/** 2つの訳が意味を1つでも共有しているか（同じ、または2文字以上の片方がもう片方に含まれる） */
+export function meaningsOverlap(a: string, b: string): boolean {
+  const pa = meaningParts(a);
+  const pb = meaningParts(b);
+  return pa.some((x) => pb.some((y) => x === y || (x.length >= 2 && y.length >= 2 && (x.includes(y) || y.includes(x)))));
+}
+
+const hasSlash = (ja: string) => /[／/]/.test(ja);
+
 /**
  * 4択の誤答を選ぶ（単語だけ。文法は本の選択肢をそのまま使う）。似た選択肢ほど力がつくので
  * 「同じ品詞・同じレベル」→「同じ品詞」→「それ以外」の順で取る
+ * v0.8〜 正解と意味を共有する訳は外す（正しい意味を選んで×にならないように）。
+ * 訳の「／」の有無は正解とそろえる（品詞の次に優先。形だけで正解が分からないように）
  */
 export function pickDistractors(item: KinfreItem, pool: Item[], rng: Rng, n = 3): KinfreItem[] {
   const ok = pool.filter(
     (o): o is KinfreItem =>
-      o.deck === "kinfre" && o.id !== item.id && o.ja !== item.ja && !o.ja.includes(item.ja) && !item.ja.includes(o.ja),
+      o.deck === "kinfre" &&
+      o.id !== item.id &&
+      o.ja !== item.ja &&
+      !o.ja.includes(item.ja) &&
+      !item.ja.includes(o.ja) &&
+      !meaningsOverlap(o.ja, item.ja),
   );
   const pos0 = item.pos[0];
   const samePos = ok.filter((o) => pos0 && o.pos[0] === pos0);
   const sameLevel = samePos.filter((o) => o.section === item.section);
+  const shape = hasSlash(item.ja);
+  const sameShape = (list: KinfreItem[]) => list.filter((o) => hasSlash(o.ja) === shape);
   const picked: KinfreItem[] = [];
-  for (const group of [sameLevel, samePos, ok]) {
+  for (const group of [sameShape(sameLevel), sameShape(samePos), sameLevel, samePos, sameShape(ok), ok]) {
     for (const o of shuffle(group, rng)) {
       if (picked.length >= n) break;
       if (!picked.some((p) => p.ja === o.ja)) picked.push(o);
@@ -100,17 +127,34 @@ export function requeueIfWrong(
   return [...queue, makeQuestion(q.item, pool, format, rng, "retry", true)];
 }
 
-type DailyArgs = {
+export type DailyArgs = {
   items: Item[];
   cards: Map<string, CardState>;
   settings: Settings;
   now: number;
   rng: Rng;
   scheduler: FSRS;
-  newIntroducedToday: number; // この教材で今日はじめて解いた数
+  newIntroducedToday: number; // この教材で今日はじめて解いた数（周回で解いた分は入れない）
   deck?: Deck; // 省略時は表示中の教材
-  recentMissIds?: string[]; // 最近ミスした問題（新しい順）。文法の類題に使う
+  recentMissIds?: string[]; // 最近ミスした問題（新しい順）。しつこい苦手の判定と文法の類題に使う
 };
+
+/** まだ解いていない問題を、設定の開始番号から番号順に（最後まで行ったら最初へ戻る） */
+export function freshInOrder(pool: Item[], cards: Map<string, CardState>, startNo = 1): Item[] {
+  const fresh = pool.filter((i) => !cards.get(i.id) || cards.get(i.id)!.fsrs.state === 0).sort((x, y) => x.order - y.order);
+  const k = fresh.findIndex((i) => i.no >= startNo);
+  return k <= 0 ? fresh : [...fresh.slice(k), ...fresh.slice(0, k)];
+}
+
+/** 今日の残り：復習の時期が来た数と、今日まだ出せる新しい問題の数（両方0なら「今日の分は終わり」） */
+export function dailyLeft(a: Omit<DailyArgs, "rng">): { due: number; newLeft: number } {
+  const deck = a.deck ?? a.settings.deck;
+  const { newPerDay } = deckSettings(a.settings, deck);
+  const pool = poolOf(a.items, a.settings, deck);
+  const due = dueItems(pool, a.cards, a.now, a.scheduler).length;
+  const freshCount = pool.filter((i) => !a.cards.get(i.id) || a.cards.get(i.id)!.fsrs.state === 0).length;
+  return { due, newLeft: Math.min(freshCount, Math.max(0, newPerDay - a.newIntroducedToday)) };
+}
 
 /**
  * 文法の類題：最近ミスした問題と同じ分野の、まだ解いていない問題
@@ -149,24 +193,28 @@ export function dueItems(items: Item[], cards: Map<string, CardState>, now: numb
 }
 
 /**
- * 今日の学習（忘却曲線モード）。表示中の教材だけで組む
- * - 約7割: 復習期限が来た問題。思い出せる確率が低い順（ミスした問題ほど早く・多く戻る）
- * - 約3割: 他の問題。しつこい苦手（期限前でも1問）→ 新しい問題 → しばらく見ていない問題
- *   文法の「新しい問題」の枠は、最近ミスした分野と同じ分野の問題（類題）を先に出す（埋め合わせは番号順のまま）
- * どちらかが足りなければ、もう片方で埋める
+ * 今日の学習（忘却曲線モード）。表示中の教材だけで組む（v0.8 で組み直し）
+ * - 復習の時期が来た問題を先に。思い出せる確率が低い順（ミスした問題ほど早く・多く戻る）。1セットの約7割
+ * - 残りは新しい問題（設定の開始番号から番号順。1日の上限まで）。足りなければ復習で埋める
+ * - しつこい苦手（ミス3回以上で、最近7日にもミスした問題）を、期限前でも1セットに1問
+ * - 文法の新しい問題の枠は、半分まで「類題」（最近ミスした分野の、まだ解いていない問題）を先に出す
+ * - 復習も新しい問題も残っていなければ空（＝今日の分は終わり）。期限前の問題は buildExtraSet で、押したときだけ出す
  */
 export function buildDailySet(a: DailyArgs): Question[] {
   const { items, cards, settings, now, rng, scheduler } = a;
   const deck = a.deck ?? settings.deck;
-  const { setSize: size, newPerDay } = deckSettings(settings, deck);
+  const { setSize: size, newPerDay, newStartNo } = deckSettings(settings, deck);
   const pool = poolOf(items, settings, deck);
   const r = (i: Item) => retrievability(cards.get(i.id), now, scheduler);
   const make = (i: Item, source: Question["source"]) => makeQuestion(i, pool, settings.format, rng, source);
 
   const due = dueItems(pool, cards, now, scheduler);
-  const dueQuota = Math.round(size * settings.reviewRatio);
-  const picked: Question[] = due.slice(0, dueQuota).map((i) => make(i, "due"));
-  const used = new Set(picked.map((q) => q.item.id));
+  const fresh = freshInOrder(pool, cards, newStartNo);
+  const newAllowed = Math.min(fresh.length, Math.max(0, newPerDay - a.newIntroducedToday));
+  if (due.length === 0 && newAllowed === 0) return [];
+
+  const picked: Question[] = [];
+  const used = new Set<string>();
   const take = (list: Item[], max: number, source: Question["source"]) => {
     for (const i of list) {
       if (picked.length >= size || max <= 0) break;
@@ -177,31 +225,60 @@ export function buildDailySet(a: DailyArgs): Question[] {
     }
   };
 
-  const othersRoom = size - picked.length;
-  const notDue = pool.filter((i) => {
-    const c = cards.get(i.id);
-    return c !== undefined && c.fsrs.state !== 0 && c.due > now;
-  });
-  const leeches = notDue.filter((i) => (cards.get(i.id)?.miss_count ?? 0) >= LEECH_MISSES).sort((x, y) => r(x) - r(y));
-  const fresh = pool.filter((i) => !cards.get(i.id) || cards.get(i.id)!.fsrs.state === 0).sort((x, y) => x.order - y.order);
-  const newAllowed = Math.max(0, newPerDay - a.newIntroducedToday);
-  const stale = notDue.slice().sort((x, y) => r(x) - r(y));
+  const recent = new Set(a.recentMissIds ?? []);
+  const leeches = pool
+    .filter((i) => {
+      const c = cards.get(i.id);
+      return c !== undefined && c.fsrs.state !== 0 && c.due > now && c.miss_count >= LEECH_MISSES && recent.has(i.id);
+    })
+    .sort((x, y) => r(x) - r(y));
 
   const byId = new Map(pool.map((i) => [i.id, i]));
   const missed = (a.recentMissIds ?? []).map((id) => byId.get(id)).filter((i): i is Item => i !== undefined);
   const similar = deck === "deru1000" ? similarFresh(fresh, missed) : [];
-  const newCount = () => picked.filter((q) => q.source === "new" || q.source === "similar").length;
-  const newRoom = Math.min(newAllowed, Math.ceil(othersRoom / 2));
 
+  take(due, Math.round(size * settings.reviewRatio), "due");
   take(leeches, 1, "leech");
-  take(similar, newRoom, "similar");
-  take(fresh, newRoom - newCount(), "new");
-  take(stale, size, "other");
-  // まだ足りなければ、残りの復習 → 新しい問題で埋める
-  take(due, size, "due");
-  take(fresh, Math.max(0, newAllowed - newCount()), "new");
+  const newSlots = Math.min(newAllowed, size - picked.length);
+  take(similar, Math.ceil(newSlots / 2), "similar");
+  take(fresh, newSlots - picked.filter((q) => q.source === "similar").length, "new");
+  take(due, size, "due"); // 新しい問題が足りなければ、残りの復習で埋める
 
   return shuffle(picked, rng);
+}
+
+/** 試験の時刻（試験日の13時。TOEIC の公開テストは午後） */
+export function examTime(examDate: string): number {
+  const [y, m, d] = examDate.split("-").map(Number);
+  return new Date(y, (m ?? 1) - 1, d ?? 1, 13, 0).getTime();
+}
+
+/** 追加で回すときに、直前に答えた問題は出さない（同じ問題を数分おきに見ても身につきにくい） */
+export const EXTRA_SKIP_RECENT_MS = 60 * 60000;
+
+/**
+ * 追加で回す（今日の分が終わったあと、押したときだけ）。期限前の問題を、試験の時刻に思い出せる確率が低い順に
+ * 試験の前に忘れかけそうな問題から出すので、試験日より後に復習が来る問題も、余った時間で試験前にもう一度見られる
+ */
+export function buildExtraSet(a: Omit<DailyArgs, "newIntroducedToday" | "recentMissIds">): Question[] {
+  const { items, cards, settings, now, rng, scheduler } = a;
+  const deck = a.deck ?? settings.deck;
+  const { setSize: size } = deckSettings(settings, deck);
+  const pool = poolOf(items, settings, deck);
+  const at = Math.max(now, examTime(settings.examDate));
+  const rAt = (i: Item) => retrievability(cards.get(i.id), at, scheduler);
+  const list = pool
+    .filter((i) => {
+      const c = cards.get(i.id);
+      if (!c || c.fsrs.state === 0 || c.due <= now) return false;
+      return c.fsrs.last_review === null || now - c.fsrs.last_review >= EXTRA_SKIP_RECENT_MS;
+    })
+    .sort((x, y) => rAt(x) - rAt(y))
+    .slice(0, size);
+  return shuffle(
+    list.map((i) => makeQuestion(i, pool, settings.format, rng, "other")),
+    rng,
+  );
 }
 
 /** 周回モード: 前回の続きから1セット分 */

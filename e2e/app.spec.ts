@@ -172,6 +172,60 @@ test("めくるモード：自己採点で記録される", async ({ page }) => 
   await page.getByRole("button", { name: "✕ やめる" }).click({ trial: true });
 });
 
+test("今日の分が終わったら「終わりました」と出し、期限前の語は押したときだけ出す", async ({ page }) => {
+  await page.goto("./");
+  await importChapter(page);
+  await page.getByRole("button", { name: "ホーム", exact: true }).click();
+  await expect(page.getByText("今日の新しい語 あと 20")).toBeVisible();
+  // 新しい語の上限（既定20語）まで、2セットを迷わず正解で解く（はじめての語は「簡単」になり、次は1週間ほど先）
+  for (let set = 0; set < 2; set++) {
+    await page.getByRole("button", { name: /今日の学習（10問）/ }).click();
+    for (let i = 0; i < 10; i++) await answer(page, new Set());
+    await page.getByRole("button", { name: "ホームへ" }).click();
+  }
+  await expect(page.getByText("✅ 今日の分は終わりました")).toBeVisible();
+  await expect(page.getByText("今日の新しい語 あと 0")).toBeVisible();
+  await expect(page.getByRole("button", { name: /今日の学習（/ })).toBeHidden();
+  await page.screenshot({ path: "test-results/13_done_today.png", fullPage: true });
+  // 追加で回す：直前の1時間に答えた語は出さないので、いまは出せる語が無い
+  const msg = new Promise<string>((resolve) => page.once("dialog", (d) => (resolve(d.message()), void d.accept())));
+  await page.getByRole("button", { name: /追加で回す（期限前の語・10問）/ }).click();
+  expect(await msg).toContain("直前の1時間");
+});
+
+test("苦手だけの周回：ミスした語だけを範囲から選んで回す", async ({ page }) => {
+  page.on("dialog", (d) => d.accept()); // 「ここでやめますか？」
+  await page.goto("./");
+  await importChapter(page);
+  await page.getByRole("button", { name: "ホーム", exact: true }).click();
+  await page.getByRole("button", { name: "周回を始める" }).click();
+  await page.getByRole("button", { name: /1周目を始める（30語）/ }).click();
+  for (let i = 0; i < 3; i++) await answer(page, new Set([2])); // 2番だけわざと間違える
+  await page.getByRole("button", { name: "✕ やめる" }).click();
+  await page.getByRole("button", { name: "ホームへ" }).click();
+  await page.getByRole("button", { name: "別の周回を始める" }).click();
+  await page.getByLabel(/苦手だけ（ミスした語/).check();
+  await expect(page.getByText("いまの対象：1語")).toBeVisible();
+  await page.screenshot({ path: "test-results/14_weak_round.png", fullPage: true });
+  await page.getByRole("button", { name: /2周目を始める（1語）/ }).click();
+  await expect(page.locator(".word")).toHaveText("word2");
+});
+
+test("データベースを開けないときは、読み込み中のまま止まらず理由と対処を出す", async ({ page }) => {
+  // 端末側の不調で IndexedDB を開けない状態を作る（Dexie 4 は版の違い・表の欠けは自分で直して開くので、それでは止まらない）
+  await page.addInitScript(() => {
+    IDBFactory.prototype.open = function () {
+      throw new DOMException("テスト用：開けない", "UnknownError");
+    };
+  });
+  await page.goto("./");
+  await expect(page.getByText("記録のデータベースを開けません")).toBeVisible();
+  await expect(page.getByText("一時的につながりません")).toBeVisible();
+  await expect(page.getByText("記録は消えていません")).toBeVisible();
+  await expect(page.getByRole("button", { name: "もう一度読み込む" })).toBeVisible();
+  await page.screenshot({ path: "test-results/12_db_error.png", fullPage: true });
+});
+
 test("一度開けば、電波がなくても起動できる", async ({ page, context }) => {
   await page.goto("./");
   await page.evaluate(() => navigator.serviceWorker.ready);

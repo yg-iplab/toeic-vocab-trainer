@@ -1,6 +1,6 @@
 // 周回の始め方を選ぶ画面（表示中の教材ごとに範囲の選び方が変わる）
 import { useEffect, useMemo, useState } from "react";
-import { unit } from "../data/stats";
+import { unit, weakIds } from "../data/stats";
 import { isMockChapter, roundItemIds, type RoundScope } from "../srs/session";
 import type { DeruItem, KinfreItem, Round } from "../types";
 import { TopBar } from "./components";
@@ -60,7 +60,7 @@ function useReport(onChange: (p: Picked) => void, p: Picked) {
 }
 
 function KinfreScope({ store, onChange }: { store: Store; onChange: (p: Picked) => void }) {
-  type Choice = "all" | "section" | "track" | "range";
+  type Choice = "all" | "section" | "track" | "range" | "weak";
   const main = useMemo(() => store.items.filter((i): i is KinfreItem => i.deck === "kinfre" && i.part === "main"), [store.items]);
   const sections = useMemo(() => [...new Set(main.map((i) => i.section))], [main]);
   const tracks = useMemo(() => [...new Set(main.map((i) => i.track).filter((t): t is number => t !== undefined))], [main]);
@@ -71,6 +71,10 @@ function KinfreScope({ store, onChange }: { store: Store; onChange: (p: Picked) 
   const [track, setTrack] = useState(tracks[0] ?? 1);
   const [from, setFrom] = useState(1);
   const [to, setTo] = useState(Math.min(100, maxNo || 100));
+  // 苦手だけ（v0.8〜）：ミスしたことのある語・最後の回答が「難しい」「あやふや」の語。範囲は既定で本編すべて
+  const [weakFrom, setWeakFrom] = useState(1);
+  const [weakTo, setWeakTo] = useState(maxNo || 1000);
+  const weak = useMemo(() => weakIds(store.items, store.cards, store.logs, weakFrom, weakTo), [store.items, store.cards, store.logs, weakFrom, weakTo]);
 
   const picked = ((): Picked => {
     switch (choice) {
@@ -82,6 +86,8 @@ function KinfreScope({ store, onChange }: { store: Store; onChange: (p: Picked) 
         return { scope: { kind: "track", track }, label: `track ${track}` };
       case "range":
         return { scope: { kind: "range", from, to }, label: `${from}–${to}` };
+      case "weak":
+        return { scope: { kind: "ids", ids: weak }, label: `苦手だけ ${weakFrom}–${weakTo}` };
     }
   })();
   useReport(onChange, picked);
@@ -122,6 +128,19 @@ function KinfreScope({ store, onChange }: { store: Store; onChange: (p: Picked) 
           <span>〜</span>
           <input type="number" inputMode="numeric" min={1} max={maxNo} value={to} onChange={(e) => setTo(Number(e.target.value))} />
         </div>
+      )}
+      <label className="radio">
+        <input type="radio" checked={choice === "weak"} onChange={() => setChoice("weak")} /> 苦手だけ（ミスした語・最後が「難しい」「あやふや」の語）
+      </label>
+      {choice === "weak" && (
+        <>
+          <div className="range-inputs">
+            <input type="number" inputMode="numeric" min={1} max={maxNo} value={weakFrom} onChange={(e) => setWeakFrom(Number(e.target.value))} aria-label="苦手だけ：から" />
+            <span>〜</span>
+            <input type="number" inputMode="numeric" min={1} max={maxNo} value={weakTo} onChange={(e) => setWeakTo(Number(e.target.value))} aria-label="苦手だけ：まで" />
+          </div>
+          <p className="sub">いまの対象：{weak.length}語。試験前の仕上げ（12/18 など）に使います。</p>
+        </>
       )}
     </>
   );

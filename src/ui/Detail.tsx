@@ -76,6 +76,7 @@ export function Detail({ store, id, onBack }: { store: Store; id: string; onBack
             tips={tipsRef}
             onOpenTips={() => setTipsOpen(true)}
             speechRate={store.settings.speechRate}
+            officialRate={store.settings.officialRate}
             clips={clips}
           />
         </section>
@@ -86,7 +87,7 @@ export function Detail({ store, id, onBack }: { store: Store; id: string; onBack
             {item.section}
             {item.track !== undefined && ` / track ${item.track}`}
           </p>
-          <ItemInfo item={item} speechRate={store.settings.speechRate} clips={clips} />
+          <ItemInfo item={item} speechRate={store.settings.speechRate} officialRate={store.settings.officialRate} clips={clips} />
         </section>
       )}
 
