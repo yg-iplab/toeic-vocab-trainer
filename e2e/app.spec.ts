@@ -120,7 +120,7 @@ test("読み込み → 周回 → ミス → 再起動しても記録が残る �
   // 書き出す前に、毎回の保存先が見えている
   await expect(page.locator(".backup-place")).toContainText("保存先：iCloud Drive › TOEICトレーナー › バックアップ");
   const downloadPromise = page.waitForEvent("download");
-  await page.getByRole("button", { name: "バックアップを書き出す" }).click();
+  await page.getByRole("button", { name: "バックアップを書き出す", exact: true }).click();
   const download = await downloadPromise;
   const path = "test-results/backup.json";
   await download.saveAs(path);
@@ -209,6 +209,38 @@ test("苦手だけの周回：ミスした語だけを範囲から選んで回�
   await page.screenshot({ path: "test-results/14_weak_round.png", fullPage: true });
   await page.getByRole("button", { name: /2周目を始める（1語）/ }).click();
   await expect(page.locator(".word")).toHaveText("word2");
+});
+
+test("学習記録をやり直す：バックアップを書き出してから、記録だけを消す（教材・設定は残る）", async ({ page }) => {
+  page.on("dialog", (d) => d.accept()); // 「消しますか？」
+  await page.goto("./");
+  await importChapter(page);
+  await page.getByRole("button", { name: "ホーム", exact: true }).click();
+  await page.getByRole("button", { name: /今日の学習（10問）/ }).click();
+  // 3番をわざと間違えるので、セットの最後にもう一度が1問増える（結果の画面が出るまで答える）
+  for (let i = 0; i < 12 && !(await page.locator(".score-num").isVisible()); i++) await answer(page, new Set([3]));
+  await page.getByRole("button", { name: "ホームへ" }).click();
+  await expect(page.getByText("今日の新しい語 あと 10")).toBeVisible();
+
+  await page.getByRole("button", { name: "設定", exact: true }).click();
+  const card = page.locator("section.reset-records");
+  await expect(card).toContainText("回答 11回"); // 10問＋セット内のもう一度1回
+  await expect(card.getByRole("button", { name: "② 単語と文法の記録を消す" })).toBeEnabled();
+  const download = page.waitForEvent("download");
+  await card.getByRole("button", { name: /① 先にバックアップを書き出す/ }).click();
+  await download;
+  await expect(card.getByRole("button", { name: "① 先にバックアップを書き出す（済み）" })).toBeVisible();
+  await card.getByRole("button", { name: "② 単語と文法の記録を消す" }).click();
+  await expect(card.getByRole("status")).toContainText("を消しました");
+  await expect(card).toContainText("回答 0回");
+  await expect(card.getByRole("button", { name: "② 単語と文法の記録を消す" })).toBeDisabled();
+  await page.screenshot({ path: "test-results/15_reset.png", fullPage: true });
+
+  await page.getByRole("button", { name: "ホーム", exact: true }).click();
+  await expect(page.getByText("今日の新しい語 あと 20")).toBeVisible();
+  await expect(page.locator(".stats-row")).toContainText("0/30");
+  await page.getByRole("button", { name: "設定", exact: true }).click();
+  await expect(page.getByText("単語 30語")).toBeVisible(); // 教材は残る
 });
 
 test("データベースを開けないときは、読み込み中のまま止まらず理由と対処を出す", async ({ page }) => {

@@ -135,7 +135,7 @@ test("公式音声：読み込み → 🔊 が公式（決まった秒）／無�
   await page.getByRole("button", { name: "設定", exact: true }).click();
   await expect(page.getByText("単語 1本（6KB・時間の表 1語）／文法 1問（3KB）")).toBeVisible();
   const downloadPromise = page.waitForEvent("download");
-  await page.getByRole("button", { name: "バックアップを書き出す" }).click();
+  await page.getByRole("button", { name: "バックアップを書き出す", exact: true }).click();
   const path = "test-results/audio_backup.json";
   await (await downloadPromise).saveAs(path);
   const { readFileSync } = await import("node:fs");

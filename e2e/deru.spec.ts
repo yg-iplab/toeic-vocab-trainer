@@ -171,7 +171,7 @@ test("文法：読み込み → 章の周回 → ミス・あやふや → 再�
   // 書き出し：バックアップ（選んだ記号だけ・本文なし）と学習メモ形式
   await page.getByRole("button", { name: "設定", exact: true }).click();
   const dl = page.waitForEvent("download");
-  await page.getByRole("button", { name: "バックアップを書き出す" }).click();
+  await page.getByRole("button", { name: "バックアップを書き出す", exact: true }).click();
   const backupPath = "test-results/deru_backup.json";
   await (await dl).saveAs(backupPath);
   const backup = JSON.parse(readFileSync(backupPath, "utf-8"));

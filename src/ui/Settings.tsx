@@ -18,8 +18,9 @@ import { db, saveSettings, upsertItems, upsertTips } from "../data/db";
 import { mergeChapters } from "../data/parseDeru";
 import { parseMaterialFile } from "../data/parseFile";
 import { ensurePersisted, isStandalone, type PersistState } from "../data/persist";
+import { recordCounts, resetRecords, type RecordCount } from "../data/reset";
 import { formatDateTime, localDay } from "../lib/date";
-import { DEFAULT_BACKUP_PLACE, type ChapterInfo, type Item, type Settings as SettingsT, type TipsDoc } from "../types";
+import { DEFAULT_BACKUP_PLACE, type ChapterInfo, type Deck, type Item, type Settings as SettingsT, type TipsDoc } from "../types";
 import { BackupPlaceHint, TopBar } from "./components";
 import type { Store } from "./store";
 
@@ -67,6 +68,71 @@ function Choice({
           ))}
       </select>
     </label>
+  );
+}
+
+/**
+ * 学習記録をやり直す（v0.8.1〜）。回答の記録・復習の予定・周回だけを消す。教材・公式音声・設定・自分のメモは残す
+ * 先にバックアップを書き出してもらい（消す前に戻れるように）、件数を出して確認してから消す
+ */
+function ResetRecords({ store, onBackup }: { store: Store; onBackup: () => Promise<boolean> }) {
+  type Target = "both" | Deck;
+  const [target, setTarget] = useState<Target>("both");
+  const [counts, setCounts] = useState<Record<Deck, RecordCount> | null>(null);
+  const [backedUp, setBackedUp] = useState(false);
+  const [done, setDone] = useState<string | null>(null);
+  useEffect(() => {
+    void recordCounts().then(setCounts);
+  }, [store.logs, store.rounds]);
+  const decks: Deck[] = target === "both" ? ["kinfre", "deru1000"] : [target];
+  const label = target === "both" ? "単語と文法" : target === "kinfre" ? "単語" : "文法";
+  const sum = (k: keyof RecordCount) => decks.reduce((n, d) => n + (counts?.[d][k] ?? 0), 0);
+  const empty = counts !== null && sum("answers") + sum("studied") + sum("rounds") === 0;
+  const doReset = async () => {
+    const what = `${label}の記録（回答 ${sum("answers")}回・解いた ${sum("studied")}${target === "deru1000" ? "問" : "語"}・周回 ${sum("rounds")}つ）`;
+    if (!confirm(`${what}を消して、はじめからやり直します。\n教材・公式音声・設定・自分のメモは残ります。\n元に戻すには、消す前に書き出したバックアップから戻します。消しますか？`)) return;
+    await resetRecords(decks);
+    await store.reload();
+    setDone(`${what}を消しました。今日の学習は新しい${target === "deru1000" ? "問題" : "語"}から始まります。`);
+  };
+  return (
+    <section className="card reset-records">
+      <h2>学習記録をやり直す</h2>
+      <p className="sub">
+        これまでの回答（○×・時間）、復習の予定、周回を消して、はじめからやり直します。<b>教材・公式音声・設定・自分のメモ（覚え方など）は残ります。</b>
+      </p>
+      <div className="seg" role="group" aria-label="やり直す教材">
+        {(
+          [
+            ["both", "両方"],
+            ["kinfre", "単語だけ"],
+            ["deru1000", "文法だけ"],
+          ] as const
+        ).map(([t, name]) => (
+          <button key={t} className={target === t ? "on" : ""} aria-pressed={target === t} onClick={() => (setTarget(t), setDone(null))}>
+            {name}
+          </button>
+        ))}
+      </div>
+      <p>
+        消える記録（{label}）：回答 <b>{sum("answers")}</b>回・解いた<b>{sum("studied")}</b>
+        {target === "deru1000" ? "問" : target === "kinfre" ? "語" : "語・問"}・周回 <b>{sum("rounds")}</b>つ
+      </p>
+      <div className="btn-row">
+        <button className="btn ghost" onClick={async () => setBackedUp(await onBackup())}>
+          ① 先にバックアップを書き出す{backedUp ? "（済み）" : ""}
+        </button>
+        <button className="btn danger" disabled={empty} onClick={doReset}>
+          ② {label}の記録を消す
+        </button>
+      </div>
+      {!backedUp && !empty && <p className="sub">①を先に。書き出したバックアップがあれば、消したあとでも「バックアップから戻す」で元に戻せます。</p>}
+      {done && (
+        <p className="notice-inline" role="status">
+          {done}
+        </p>
+      )}
+    </section>
   );
 }
 
@@ -227,12 +293,13 @@ export function Settings({ store }: { store: Store }) {
     setMsg(`${deck === "kinfre" ? "単語" : "文法"}の公式音声を消しました。`);
   };
 
-  const backup = async () => {
+  const backup = async (): Promise<boolean> => {
     const name = await exportBackup(store);
     if (name) {
       setMsg(backupDoneMessage(name, s.backupPlace));
       setSkipped([]);
     }
+    return !!name;
   };
 
   const savePlace = () => {
@@ -320,6 +387,8 @@ export function Settings({ store }: { store: Store }) {
           </label>
         </div>
       </section>
+
+      <ResetRecords store={store} onBackup={backup} />
 
       <section className="card">
         <h2>教材データ</h2>
@@ -497,7 +566,7 @@ export function Settings({ store }: { store: Store }) {
         />
         <p className="sub">🔊 のボタンは、公式音声を読み込んだ語・問題では公式音声（「公式」）、それ以外は端末の読み上げ機能（「合成」）で鳴ります。速さは公式と合成で別々に決められます。iPhone で鳴らないときは、マナーモード（消音）を切ってください。</p>
       </section>
-      <p className="footer-note">TOEIC単語・文法トレーナー v0.8（個人用の非公式ツール）・教材データはこの端末の中だけにあります</p>
+      <p className="footer-note">TOEIC単語・文法トレーナー v0.8.1（個人用の非公式ツール）・教材データはこの端末の中だけにあります</p>
     </div>
   );
 }
