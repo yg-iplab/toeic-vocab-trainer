@@ -3,7 +3,7 @@
 //   新しい版を出したあと電波のある所で1回開いただけでも、次に電波なしで開けるように。1つでも取れなければ新しい版は入らない（古い版が残る）
 // - 画面（HTML）: ネット優先。正しく取れたときだけ保存し、つながらなければ保存済みのものを使う
 // - JS・CSS・画像: 保存済み優先。無ければ取ってきて、正しく取れたときだけ保存する
-const CACHE = "vocab-trainer-v9";
+const CACHE = "vocab-trainer-v10";
 const SHELL = ["./", "./index.html", "./manifest.webmanifest", "./icon.svg", "./icon-192.png", "./apple-touch-icon.png"];
 
 /** index.html が読む JS・CSS（Vite が付ける名前は版ごとに変わるので、画面の中から拾う） */

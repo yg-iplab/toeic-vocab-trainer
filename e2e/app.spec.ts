@@ -268,3 +268,55 @@ test("一度開けば、電波がなくても起動できる", async ({ page, co
   await expect(page.getByText("はじめに")).toBeVisible();
   await context.setOffline(false);
 });
+
+test("ほかの端末の記録と合わせる：両方の端末で解いた回答が、どちらも消えずに残る", async ({ page, browser }) => {
+  async function daily(p: Page, wrong: Set<number>) {
+    await p.getByRole("button", { name: "ホーム", exact: true }).click();
+    await p.getByRole("button", { name: /今日の学習（10問）/ }).click();
+    for (let guard = 0; guard < 20; guard++) {
+      if (await p.locator(".score").isVisible()) break;
+      await answer(p, wrong);
+    }
+    await expect(p.locator(".score")).toBeVisible();
+    await p.goto("./");
+  }
+
+  // 端末A（iPhone）：今日の学習で word2 だけ間違える → バックアップを書き出す
+  await page.goto("./");
+  await importChapter(page);
+  await daily(page, new Set([2]));
+  await page.getByRole("button", { name: "設定", exact: true }).click();
+  const downloadPromise = page.waitForEvent("download");
+  await page.getByRole("button", { name: "バックアップを書き出す", exact: true }).click();
+  const path = "test-results/merge_backup_a.json";
+  await (await downloadPromise).saveAs(path);
+  const a = JSON.parse(readFileSync(path, "utf-8"));
+
+  // 端末B（iPad）：別に今日の学習を全部正解 → Aのバックアップを「合わせて読み込む」
+  const other = await browser.newContext({ ...test.info().project.use });
+  const p2 = await other.newPage();
+  await p2.goto("./");
+  await importChapter(p2);
+  await daily(p2, new Set());
+  await p2.getByRole("button", { name: "設定", exact: true }).click();
+  let dialogText = "";
+  p2.on("dialog", (d) => ((dialogText = d.message()), d.accept()));
+  await p2.locator("label", { hasText: "合わせて読み込む" }).locator("input[type=file]").setInputFiles(path);
+  await expect(p2.getByText(new RegExp(`合わせました（足した回答 ${a.logs.length}件`))).toBeVisible();
+  expect(dialogText).toContain("この端末の記録は消えません");
+  expect(dialogText).toContain(`単語 ${a.logs.length}件`);
+  await p2.screenshot({ path: "test-results/09_merge.png", fullPage: true });
+
+  // Bの記録に、Aのミスが入っている。Bの回答も残っている
+  await p2.getByRole("button", { name: "記録", exact: true }).click();
+  await expect(p2.getByText("ミスした語 1語")).toBeVisible();
+  await p2.locator(".row", { hasText: "word2" }).click();
+  await expect(p2.getByText("回答の履歴（3回）")).toBeVisible(); // Aの×・Aのもう一度○・Bの○
+
+  // 同じファイルをもう一度合わせても、増えない
+  await p2.getByRole("button", { name: "戻る" }).click();
+  await p2.getByRole("button", { name: "設定", exact: true }).click();
+  await p2.locator("label", { hasText: "合わせて読み込む" }).locator("input[type=file]").setInputFiles(path);
+  await expect(p2.getByText(/すべてこの端末に入っています/)).toBeVisible();
+  await other.close();
+});

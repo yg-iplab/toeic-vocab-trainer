@@ -15,6 +15,7 @@ import {
 } from "../data/backup";
 import { audioSummary, deleteAudio, formatBytes, importAudioFiles, type AudioSummary } from "../data/audio";
 import { db, saveSettings, upsertItems, upsertTips } from "../data/db";
+import { applyMerge, backupRecords, localRecords, mergeRecords } from "../data/merge";
 import { mergeChapters } from "../data/parseDeru";
 import { parseMaterialFile } from "../data/parseFile";
 import { ensurePersisted, isStandalone, type PersistState } from "../data/persist";
@@ -258,6 +259,38 @@ export function Settings({ store }: { store: Store }) {
     }
   };
 
+  // 別の端末のバックアップを、この端末の記録に合わせて読み込む（この端末の記録は消さない）
+  const merge = async (files: FileList | null) => {
+    const f = files?.[0];
+    if (!f) return;
+    try {
+      const b = parseBackup(await f.text());
+      const m = mergeRecords(await localRecords(), backupRecords(b), store.scheduler);
+      const { added, dropped, oldestAdded, newestAdded, addedRounds, updatedNotes } = m.summary;
+      const total = added.kinfre + added.deru1000;
+      if (total === 0 && dropped === 0 && addedRounds === 0 && updatedNotes === 0) {
+        setMsg(`このバックアップ（${formatDateTime(Date.parse(b.exportedAt))}）の記録は、すべてこの端末に入っています。合わせるものはありません。`);
+        return;
+      }
+      const lines = [
+        `バックアップ（${formatDateTime(Date.parse(b.exportedAt))}）の記録を、この端末の記録に合わせます。この端末の記録は消えません。`,
+        "",
+        `・足す回答：単語 ${added.kinfre}件・文法 ${added.deru1000}件`,
+      ];
+      if (oldestAdded !== undefined && newestAdded !== undefined) lines.push(`　（${formatDateTime(oldestAdded)} 〜 ${formatDateTime(newestAdded)} の回答）`);
+      if (addedRounds) lines.push(`・足す周回：${addedRounds}`);
+      if (updatedNotes) lines.push(`・新しい方に書き換える自分のメモ：${updatedNotes}`);
+      if (dropped) lines.push(`・「学習記録をやり直す」より前なので入れない回答：${dropped}件`);
+      lines.push("", "復習の予定は、合わせた回答から計算し直します。設定はこの端末のままです。合わせますか？");
+      if (!confirm(lines.join("\n"))) return;
+      await applyMerge(m);
+      await store.reload();
+      setMsg(`合わせました（足した回答 ${total}件・復習の予定を計算し直した ${m.summary.recomputed}語・問）。ほかの端末にも同じ記録を入れるには、ここでバックアップを書き出して、その端末で「合わせて読み込む」をします。`);
+    } catch (e) {
+      setMsg((e as Error).message);
+    }
+  };
+
   const importAudio = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
     // 単語は、端末にある本編の語の track だけ入れる（使わない track で容量を使わない）
@@ -380,6 +413,17 @@ export function Settings({ store }: { store: Store }) {
           </label>
         </div>
         <p className="sub">戻すときは、保存先のいちばん新しいファイル（名前の日付・時刻が最後のもの）を選びます。</p>
+        <h3 className="sub-h">ほかの端末の記録と合わせる</h3>
+        <p className="sub">
+          iPhone・iPad・Mac の両方で解いたときに使います。「戻す」と違い、この端末の記録は消えず、バックアップにしか無い回答だけを足します。同じ回答は二重に入りません。
+          手順：解いた端末でバックアップを書き出す → この端末で「合わせて読み込む」→ ここで書き出し直して、ほかの端末でも「合わせて読み込む」。
+        </p>
+        <div className="btn-row">
+          <label className="btn ghost file">
+            合わせて読み込む
+            <input type="file" onChange={(e) => (merge(e.target.files), (e.target.value = ""))} />
+          </label>
+        </div>
         <div className="form">
           <label>
             バックアップの保存先（書き出すたびに案内する場所。変えたときだけ書き直す）
@@ -566,7 +610,7 @@ export function Settings({ store }: { store: Store }) {
         />
         <p className="sub">🔊 のボタンは、公式音声を読み込んだ語・問題では公式音声（「公式」）、それ以外は端末の読み上げ機能（「合成」）で鳴ります。速さは公式と合成で別々に決められます。iPhone で鳴らないときは、マナーモード（消音）を切ってください。</p>
       </section>
-      <p className="footer-note">TOEIC単語・文法トレーナー v0.8.1（個人用の非公式ツール）・教材データはこの端末の中だけにあります</p>
+      <p className="footer-note">TOEIC単語・文法トレーナー v0.9（個人用の非公式ツール）・教材データはこの端末の中だけにあります</p>
     </div>
   );
 }
